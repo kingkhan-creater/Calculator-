@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <files-path name="vault_export" path="exports/" />
+    <files-path name="vault_media" path="vault_media/" />
+    <cache-path name="vault_cache" path="exports/" />
+    <cache-path name="vault_playback" path="temp_vault_playback/" />
+    <cache-path name="cache_root" path="." />
+</paths>

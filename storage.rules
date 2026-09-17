@@ -1,0 +1,39 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'ADMIN' ||
+        request.auth.token.role == 'super_admin' ||
+        request.auth.token.admin == true ||
+        request.auth.token.email == 'king.khan648k@gmail.com'
+      );
+    }
+
+    // Guest recordings storage path: guest_recordings/{userId}/{fileName}
+    match /guest_recordings/{userId}/{allPaths=**} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if isOwner(userId) || isAdmin();
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // Legacy and device recordings path: recordings/{deviceId}/{fileName}
+    match /recordings/{deviceId}/{allPaths=**} {
+      allow read, write, delete: if isAuthenticated() || isAdmin();
+    }
+
+    // User private backups: users/{userId}/{allPaths=**}
+    match /users/{userId}/{allPaths=**} {
+      allow read, write, delete: if isOwner(userId) || isAdmin();
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Calculator",
+  "description": "A functional calculator with a secure hidden vault accessible via secret PIN.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Calculator</string>
+    <string name="accessibility_volume_service_label">Calculator Vault Volume Control</string>
+    <string name="accessibility_volume_service_description">Enables hardware volume buttons to discreetly start and stop video recording even when the calculator vault is closed or locked.</string>
+</resources>

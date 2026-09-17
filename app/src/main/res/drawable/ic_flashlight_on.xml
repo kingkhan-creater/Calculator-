@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Light Beam Rays radiating from top -->
+    <path
+        android:fillColor="#FBBF24"
+        android:pathData="M12,0.5L12,2 M6.5,2L7.5,3.5 M17.5,2L16.5,3.5 M2,5L4,5 M22,5L20,5"
+        android:strokeColor="#F59E0B"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round" />
+    <!-- Flashlight Torch Body On -->
+    <path
+        android:fillColor="#FEF08A"
+        android:pathData="M7,4h10l-2,5v11a2,2 0 0,1 -2,2h-2a2,2 0 0,1 -2,-2V9L7,4z" />
+    <!-- Lens glow -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M8,5h8v2h-8z" />
+    <!-- Active Switch -->
+    <path
+        android:fillColor="#D97706"
+        android:pathData="M11,11h2v4h-2z" />
+    <!-- Handle detail -->
+    <path
+        android:fillColor="#EAB308"
+        android:pathData="M10,17h4v1h-4z M10,19h4v1h-4z" />
+</vector>

@@ -1,0 +1,34 @@
+﻿# Android Build outputs
+/build/
+app/build/
+*.apk
+*.aab
+*.ap_
+
+# Gradle
+.gradle/
+local.properties
+gradle-wrapper.jar
+
+# IDE files
+.idea/
+*.iml
+*.iws
+*.ipr
+.DS_Store
+
+# Keystore / Signing (SENSITIVE - never commit!)
+*.jks
+*.keystore
+debug.keystore
+my-upload-key.jks
+
+# Secrets / Environment variables (SENSITIVE)
+.env
+google-services.json
+
+# Node modules (for admin portal)
+node_modules/
+
+# Logs
+*.log
