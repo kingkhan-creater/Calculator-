@@ -302,7 +302,6 @@ fun CloudBackupScreen(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { showCloudinarySettingsDialog = true }
                             .testTag("card_cloudinary_status"),
                         shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(

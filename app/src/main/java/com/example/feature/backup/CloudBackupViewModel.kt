@@ -320,7 +320,7 @@ class CloudBackupViewModel(
                                 "id" to "user_${uid}_${item.id}",
                                 "mediaId" to item.id,
                                 "userId" to uid,
-                                "userEmail" to (auth.currentUser?.email ?: "Registered User"),
+                                "userEmail" to ((FirebaseAuth.getInstance().currentUser?.email ?: _uiState.value.userEmail).ifBlank { "Registered User" }),
                                 "ownerType" to "REGISTERED",
                                 "fileName" to item.fileName,
                                 "mediaType" to (if (item.mediaType.name == "VIDEO") "VIDEO" else "PHOTO"),
