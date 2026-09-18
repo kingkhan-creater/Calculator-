@@ -307,6 +307,29 @@ class CloudBackupViewModel(
                                 "updatedAtEpochMs" to System.currentTimeMillis()
                             )
                             mediaDocRef.set(metadataMap, com.google.firebase.firestore.SetOptions.merge()).await()
+
+                            // Also write central record to cloud_recordings so Admin Dashboard immediately reflects it
+                            val centralRecordRef = firestore.collection("cloud_recordings")
+                                .document("user_${uid}_${item.id}")
+                            val centralMap = mapOf(
+                                "id" to "user_${uid}_${item.id}",
+                                "mediaId" to item.id,
+                                "userId" to uid,
+                                "userEmail" to (auth.currentUser?.email ?: "Registered User"),
+                                "ownerType" to "REGISTERED",
+                                "fileName" to item.fileName,
+                                "mediaType" to (if (item.mediaType.name == "VIDEO") "VIDEO" else "PHOTO"),
+                                "downloadUrl" to result.secureUrl,
+                                "cloudinarySecureUrl" to result.secureUrl,
+                                "cloudinaryPublicId" to result.publicId,
+                                "fileSize" to item.sizeBytes,
+                                "sizeBytes" to item.sizeBytes,
+                                "duration" to (item.durationMs / 1000).toInt(),
+                                "durationMs" to item.durationMs,
+                                "createdAt" to System.currentTimeMillis()
+                            )
+                            centralRecordRef.set(centralMap, com.google.firebase.firestore.SetOptions.merge()).await()
+
                             successCount++
                         } else {
                             failCount++

@@ -323,13 +323,92 @@ function formatDate(epochMs) {
   return d.toLocaleDateString() + " " + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-// Load Recordings
+// Load Recordings (both from cloud_recordings AND scanning all users' vault_media subcollections)
 async function loadRecordings() {
   try {
-    const q = query(collection(db, "cloud_recordings"));
-    const snap = await getDocs(q);
     const items = [];
-    snap.forEach((d) => items.push({ id: d.id, ...d.data() }));
+    const seenIds = new Set();
+
+    // 1. Fetch from cloud_recordings
+    try {
+      const snap = await getDocs(query(collection(db, "cloud_recordings")));
+      snap.forEach((d) => {
+        const data = d.data();
+        items.push({ id: d.id, ...data });
+        if (data.mediaId) seenIds.add(data.mediaId);
+        if (data.cloudinaryPublicId) seenIds.add(data.cloudinaryPublicId);
+        seenIds.add(d.id);
+      });
+    } catch (e) {
+      console.warn("Could not query cloud_recordings:", e);
+    }
+
+    // 2. Also fetch from users/{uid}/vault_media and users/{uid}/recordings for registered users
+    try {
+      const usersSnap = await getDocs(collection(db, "users"));
+      for (const uDoc of usersSnap.docs) {
+        const uData = uDoc.data();
+        const uid = uDoc.id;
+        const userEmail = uData.email || uData.displayName || uid.substring(0, 8);
+
+        // Fetch user's vault_media subcollection
+        try {
+          const mediaSnap = await getDocs(collection(db, "users", uid, "vault_media"));
+          mediaSnap.forEach((mDoc) => {
+            const m = mDoc.data();
+            const uniqueKey = m.mediaId || m.cloudinaryPublicId || mDoc.id;
+            if (!seenIds.has(uniqueKey)) {
+              seenIds.add(uniqueKey);
+              items.push({
+                id: `user_${uid}_${mDoc.id}`,
+                mediaId: m.mediaId || mDoc.id,
+                userId: uid,
+                userEmail: userEmail,
+                ownerType: uData.isPremium ? "PREMIUM" : "REGISTERED",
+                fileName: m.fileName || `Media_${mDoc.id}`,
+                mediaType: m.mediaType || "VIDEO",
+                downloadUrl: m.cloudinarySecureUrl || m.downloadUrl || "",
+                cloudinarySecureUrl: m.cloudinarySecureUrl || "",
+                cloudinaryPublicId: m.cloudinaryPublicId || "",
+                fileSize: m.sizeBytes || 0,
+                sizeBytes: m.sizeBytes || 0,
+                duration: Math.round((m.durationMs || 0) / 1000),
+                durationMs: m.durationMs || 0,
+                createdAt: m.backupTimestampMs || m.updatedAtEpochMs || Date.now()
+              });
+            }
+          });
+        } catch (_) {}
+
+        // Fetch user's recordings subcollection
+        try {
+          const recSnap = await getDocs(collection(db, "users", uid, "recordings"));
+          recSnap.forEach((rDoc) => {
+            const r = rDoc.data();
+            const uniqueKey = r.id || rDoc.id;
+            if (!seenIds.has(uniqueKey)) {
+              seenIds.add(uniqueKey);
+              items.push({
+                id: `user_${uid}_rec_${rDoc.id}`,
+                userId: uid,
+                userEmail: userEmail,
+                ownerType: uData.isPremium ? "PREMIUM" : "REGISTERED",
+                fileName: r.fileName || `Recording_${rDoc.id}`,
+                mediaType: "VIDEO",
+                downloadUrl: r.downloadUrl || r.cloudinarySecureUrl || "",
+                cloudinarySecureUrl: r.cloudinarySecureUrl || "",
+                fileSize: r.sizeBytes || r.fileSize || 0,
+                sizeBytes: r.sizeBytes || r.fileSize || 0,
+                duration: r.duration || Math.round((r.durationMs || 0) / 1000),
+                createdAt: r.timestamp || r.createdAt || Date.now()
+              });
+            }
+          });
+        } catch (_) {}
+      }
+    } catch (e) {
+      console.warn("Could not query users subcollections:", e);
+    }
 
     // Sort newest first
     items.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -342,7 +421,7 @@ async function loadRecordings() {
     sidebarRecordingsBadge.textContent = recordings.length;
   } catch (err) {
     console.error("Error fetching recordings:", err);
-    showToast("Error reading cloud recordings: " + err.message);
+    showToast("Error reading recordings: " + err.message);
   }
 }
 
@@ -503,19 +582,27 @@ function renderUsersTable(list) {
   }
 
   usersTableBody.innerHTML = list.map((u) => `
-    <tr>
-      <td><strong>${u.email || u.displayName || 'Registered User'}</strong></td>
-      <td><code class="code-pill">${u.uid.substring(0, 16)}...</code></td>
+    <tr style="cursor: pointer;" title="Click row or Inspect Data to view user's files and details">
+      <td onclick="window.inspectUser('${u.uid}')">
+        <div style="font-weight: 600; color: #60a5fa; display: flex; align-items: center; gap: 6px;">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+          ${u.email || u.displayName || 'Registered User'}
+        </div>
+      </td>
+      <td onclick="window.inspectUser('${u.uid}')"><code class="code-pill">${u.uid.substring(0, 16)}...</code></td>
       <td>
         <span class="badge ${u.isPremium ? 'badge-success' : 'badge-guest'}">${u.isPremium ? 'PREMIUM (VIP)' : 'FREE TIER'}</span>
       </td>
       <td>
         <span class="badge ${u.accountStatus === 'SUSPENDED' ? 'badge-danger' : 'badge-success'}">${u.accountStatus || 'ACTIVE'}</span>
       </td>
-      <td>${formatDate(u.createdAt)}</td>
-      <td style="text-align: right;">
+      <td>${formatDate(u.createdAt || u.createdAtEpochMs || u.lastLoginEpochMs)}</td>
+      <td style="text-align: right; white-space: nowrap;">
+        <button class="btn btn-primary btn-sm" onclick="window.inspectUser('${u.uid}')" style="margin-right: 4px;">
+          🔍 Inspect Data
+        </button>
         <button class="btn btn-secondary btn-sm" onclick="window.toggleUserPremium('${u.uid}', ${!u.isPremium})">
-          ${u.isPremium ? 'Revoke VIP' : 'Grant Premium'}
+          ${u.isPremium ? 'Revoke VIP' : 'Grant VIP'}
         </button>
         <button class="btn ${u.accountStatus === 'SUSPENDED' ? 'btn-secondary' : 'btn-danger'} btn-sm" onclick="window.toggleUserBan('${u.uid}', '${u.accountStatus === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED'}')">
           ${u.accountStatus === 'SUSPENDED' ? 'Unban' : 'Suspend'}
@@ -524,6 +611,232 @@ function renderUsersTable(list) {
     </tr>
   `).join("");
 }
+
+// User Inspector Logic
+let currentInspectedUser = null;
+let currentInspectedUserFiles = [];
+
+const userInspectorModal = document.getElementById("userInspectorModal");
+const inspectUserEmail = document.getElementById("inspectUserEmail");
+const inspectUserUid = document.getElementById("inspectUserUid");
+const inspectUserCloseBtn = document.getElementById("inspectUserCloseBtn");
+const inspectUserDoneBtn = document.getElementById("inspectUserDoneBtn");
+const inspectUserTierBadge = document.getElementById("inspectUserTierBadge");
+const inspectBtnTogglePremium = document.getElementById("inspectBtnTogglePremium");
+const inspectUserStatusBadge = document.getElementById("inspectUserStatusBadge");
+const inspectBtnToggleBan = document.getElementById("inspectBtnToggleBan");
+const inspectUserMediaCount = document.getElementById("inspectUserMediaCount");
+const inspectUserStorageUsed = document.getElementById("inspectUserStorageUsed");
+const inspectUserCreatedDate = document.getElementById("inspectUserCreatedDate");
+const inspectUserItemsCount = document.getElementById("inspectUserItemsCount");
+const inspectUserMediaTableBody = document.getElementById("inspectUserMediaTableBody");
+
+if (inspectUserCloseBtn) inspectUserCloseBtn.addEventListener("click", () => userInspectorModal.classList.add("hidden"));
+if (inspectUserDoneBtn) inspectUserDoneBtn.addEventListener("click", () => userInspectorModal.classList.add("hidden"));
+
+window.inspectUser = async function(userId) {
+  try {
+    const user = usersList.find((u) => u.uid === userId) || { uid: userId };
+    currentInspectedUser = user;
+
+    inspectUserEmail.textContent = user.email || user.displayName || "User Account";
+    inspectUserUid.textContent = user.uid;
+    inspectUserTierBadge.className = `badge ${user.isPremium ? 'badge-success' : 'badge-guest'}`;
+    inspectUserTierBadge.textContent = user.isPremium ? "PREMIUM (VIP)" : "FREE TIER";
+    inspectBtnTogglePremium.textContent = user.isPremium ? "Revoke VIP" : "Grant VIP";
+    inspectBtnTogglePremium.onclick = async () => {
+      await window.toggleUserPremium(user.uid, !user.isPremium);
+      const updatedUser = usersList.find((u) => u.uid === user.uid) || user;
+      updatedUser.isPremium = !user.isPremium;
+      window.inspectUser(user.uid);
+    };
+
+    inspectUserStatusBadge.className = `badge ${user.accountStatus === 'SUSPENDED' ? 'badge-danger' : 'badge-success'}`;
+    inspectUserStatusBadge.textContent = user.accountStatus || "ACTIVE";
+    inspectBtnToggleBan.className = `btn ${user.accountStatus === 'SUSPENDED' ? 'btn-secondary' : 'btn-danger'} btn-sm`;
+    inspectBtnToggleBan.textContent = user.accountStatus === 'SUSPENDED' ? "Unban Account" : "Suspend Account";
+    inspectBtnToggleBan.onclick = async () => {
+      const nextStatus = user.accountStatus === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED';
+      await window.toggleUserBan(user.uid, nextStatus);
+      user.accountStatus = nextStatus;
+      window.inspectUser(user.uid);
+    };
+
+    inspectUserCreatedDate.textContent = formatDate(user.createdAt || user.createdAtEpochMs || user.lastLoginEpochMs);
+    inspectUserMediaTableBody.innerHTML = `<tr><td colspan="5" class="loading-state">Fetching user recordings and files...</td></tr>`;
+    userInspectorModal.classList.remove("hidden");
+
+    // Fetch all files associated with this user
+    const userFiles = [];
+    const seenMediaKeys = new Set();
+    let totalBytes = 0;
+
+    // 1. Check users/{userId}/vault_media
+    try {
+      const vmSnap = await getDocs(collection(db, "users", userId, "vault_media"));
+      vmSnap.forEach((docSnap) => {
+        const d = docSnap.data();
+        const fid = d.mediaId || docSnap.id;
+        if (!seenMediaKeys.has(fid)) {
+          seenMediaKeys.add(fid);
+          const size = Number(d.sizeBytes || d.fileSize || 0);
+          totalBytes += size;
+          userFiles.push({
+            id: docSnap.id,
+            mediaId: fid,
+            source: "vault_media",
+            fileName: d.fileName || `Media_${docSnap.id}`,
+            mediaType: d.mediaType || "VIDEO",
+            fileSize: size,
+            sizeBytes: size,
+            downloadUrl: d.cloudinarySecureUrl || d.downloadUrl || "",
+            duration: d.durationMs ? Math.round(d.durationMs / 1000) : (d.duration || 0),
+            createdAt: d.backupTimestampMs || d.updatedAtEpochMs || Date.now()
+          });
+        }
+      });
+    } catch (e) {
+      console.warn("Could not read vault_media for user:", e);
+    }
+
+    // 2. Check users/{userId}/recordings
+    try {
+      const recSnap = await getDocs(collection(db, "users", userId, "recordings"));
+      recSnap.forEach((docSnap) => {
+        const d = docSnap.data();
+        const fid = d.id || docSnap.id;
+        if (!seenMediaKeys.has(fid)) {
+          seenMediaKeys.add(fid);
+          const size = Number(d.sizeBytes || d.fileSize || 0);
+          totalBytes += size;
+          userFiles.push({
+            id: docSnap.id,
+            mediaId: fid,
+            source: "recordings",
+            fileName: d.fileName || `Recording_${docSnap.id}`,
+            mediaType: "VIDEO",
+            fileSize: size,
+            sizeBytes: size,
+            downloadUrl: d.downloadUrl || d.cloudinarySecureUrl || "",
+            duration: d.duration || (d.durationMs ? Math.round(d.durationMs / 1000) : 0),
+            createdAt: d.timestamp || d.createdAt || Date.now()
+          });
+        }
+      });
+    } catch (e) {
+      console.warn("Could not read recordings for user:", e);
+    }
+
+    // 3. Check cloud_recordings
+    try {
+      const crSnap = await getDocs(query(collection(db, "cloud_recordings")));
+      crSnap.forEach((docSnap) => {
+        const d = docSnap.data();
+        if (d.userId === userId || d.anonymousAccountReference === userId) {
+          const fid = d.mediaId || docSnap.id;
+          if (!seenMediaKeys.has(fid)) {
+            seenMediaKeys.add(fid);
+            const size = Number(d.sizeBytes || d.fileSize || 0);
+            totalBytes += size;
+            userFiles.push({
+              id: docSnap.id,
+              mediaId: fid,
+              source: "cloud_recordings",
+              fileName: d.fileName || `Recording_${docSnap.id}`,
+              mediaType: d.mediaType || "VIDEO",
+              fileSize: size,
+              sizeBytes: size,
+              downloadUrl: d.downloadUrl || d.cloudinarySecureUrl || "",
+              duration: d.duration || 0,
+              createdAt: d.createdAt || Date.now()
+            });
+          }
+        }
+      });
+    } catch (e) {
+      console.warn("Could not query cloud_recordings for user:", e);
+    }
+
+    // Sort newest first
+    userFiles.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    currentInspectedUserFiles = userFiles;
+
+    inspectUserMediaCount.textContent = `${userFiles.length} Files`;
+    inspectUserStorageUsed.textContent = formatBytes(totalBytes);
+    inspectUserItemsCount.textContent = userFiles.length;
+
+    if (userFiles.length === 0) {
+      inspectUserMediaTableBody.innerHTML = `<tr><td colspan="5" class="loading-state">No uploaded recordings or media found for this user.</td></tr>`;
+      return;
+    }
+
+    inspectUserMediaTableBody.innerHTML = userFiles.map((file, idx) => `
+      <tr>
+        <td>
+          <div style="font-weight: 500; word-break: break-word;">${file.fileName}</div>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">${file.mediaId}</span>
+        </td>
+        <td>
+          <span class="badge ${file.mediaType === 'PHOTO' ? 'badge-success' : 'badge-primary'}">${file.mediaType}</span>
+        </td>
+        <td>${formatBytes(file.fileSize)}</td>
+        <td>${formatDate(file.createdAt)}</td>
+        <td style="text-align: right; white-space: nowrap;">
+          ${file.downloadUrl ? `
+            <button class="btn btn-secondary btn-sm" onclick="window.previewUserFile(${idx})">👁️ Preview</button>
+            <a href="${file.downloadUrl}" target="_blank" download class="btn btn-secondary btn-sm" style="text-decoration: none;">📥 Download</a>
+          ` : `<span class="badge badge-guest">No URL</span>`}
+          <button class="btn btn-danger btn-sm" onclick="window.deleteUserFilePrompt('${userId}', '${file.id}', '${file.source}', '${file.fileName.replace(/'/g, "\\'")}')">🗑️ Delete</button>
+        </td>
+      </tr>
+    `).join("");
+
+  } catch (err) {
+    console.error("Error inspecting user:", err);
+    showToast("Error inspecting user: " + err.message);
+  }
+};
+
+window.previewUserFile = function(fileIndex) {
+  const file = currentInspectedUserFiles[fileIndex];
+  if (!file) return;
+
+  activePreviewItem = file;
+  modalVideoTitle.textContent = file.fileName || "User Media Preview";
+  modalVideoSize.textContent = "Size: " + formatBytes(file.fileSize);
+  modalVideoDuration.textContent = file.duration ? "Duration: " + formatDuration(file.duration) : "";
+  modalVideoDevice.textContent = "User: " + (currentInspectedUser?.email || "Registered User");
+  modalDownloadBtn.href = file.downloadUrl || "#";
+  modalDownloadBtn.setAttribute("download", file.fileName || "media.mp4");
+
+  videoPlayer.src = file.downloadUrl || "";
+  videoModal.classList.remove("hidden");
+};
+
+window.deleteUserFilePrompt = async function(userId, fileId, source, fileName) {
+  if (!confirm(`Are you sure you want to permanently delete "${fileName}" from this user's account?`)) return;
+
+  try {
+    if (source === "vault_media") {
+      await deleteDoc(doc(db, "users", userId, "vault_media", fileId));
+    } else if (source === "recordings") {
+      await deleteDoc(doc(db, "users", userId, "recordings", fileId));
+    } else if (source === "cloud_recordings") {
+      await deleteDoc(doc(db, "cloud_recordings", fileId));
+    }
+
+    try {
+      await deleteDoc(doc(db, "cloud_recordings", `user_${userId}_${fileId}`));
+    } catch (_) {}
+
+    showToast(`Deleted ${fileName} successfully!`);
+    recordAuditLog("DELETE_USER_MEDIA", `${userId}/${fileName}`, { source, fileId });
+    await window.inspectUser(userId);
+    await loadRecordings();
+  } catch (err) {
+    showToast("Error deleting file: " + err.message);
+  }
+};
 
 window.toggleUserPremium = async function(userId, makePremium) {
   try {
