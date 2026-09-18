@@ -41,8 +41,6 @@ fun CloudBackupScreen(
     val context = LocalContext.current
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
-    var showCloudinarySettingsDialog by remember { mutableStateOf(false) }
-
     LaunchedEffect(Unit) {
         viewModel.loadCloudinaryConfig(context)
     }
@@ -56,17 +54,6 @@ fun CloudBackupScreen(
             snackbarHostState.showSnackbar(it)
             viewModel.clearMessages()
         }
-    }
-
-    if (showCloudinarySettingsDialog) {
-        CloudinaryConfigDialog(
-            initialConfig = uiState.cloudinaryConfig,
-            onSave = { newConfig ->
-                viewModel.saveCloudinaryConfig(context, newConfig)
-                showCloudinarySettingsDialog = false
-            },
-            onDismiss = { showCloudinarySettingsDialog = false }
-        )
     }
 
     Scaffold(
@@ -100,18 +87,6 @@ fun CloudBackupScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back"
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(
-                        onClick = { showCloudinarySettingsDialog = true },
-                        modifier = Modifier.testTag("btn_cloudinary_settings")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Tune,
-                            contentDescription = "Cloudinary Settings",
-                            tint = MaterialTheme.colorScheme.primary
                         )
                     }
                 },
