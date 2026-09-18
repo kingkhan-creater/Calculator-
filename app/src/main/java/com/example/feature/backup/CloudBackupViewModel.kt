@@ -81,8 +81,41 @@ class CloudBackupViewModel(
     }
 
     fun loadCloudinaryConfig(context: Context) {
-        val config = com.example.integration.cloudinary.CloudinaryConfigManager.getConfig(context)
-        _uiState.update { it.copy(cloudinaryConfig = config) }
+        viewModelScope.launch {
+            try {
+                val remoteDoc = firestore.collection("system_config").document("cloudinary").get().await()
+                if (remoteDoc.exists()) {
+                    val rawAccounts = remoteDoc.get("accounts") as? List<*>
+                    val parsedAccounts = mutableListOf<com.example.integration.cloudinary.CloudinaryAccount>()
+                    if (rawAccounts != null) {
+                        for (item in rawAccounts) {
+                            if (item is Map<*, *>) {
+                                val cName = item["cloudName"]?.toString() ?: ""
+                                val preset = item["uploadPreset"]?.toString() ?: ""
+                                val label = item["label"]?.toString() ?: ""
+                                val enabled = item["enabled"] as? Boolean ?: true
+                                if (cName.isNotBlank() && preset.isNotBlank()) {
+                                    parsedAccounts.add(com.example.integration.cloudinary.CloudinaryAccount(cName, preset, label, enabled))
+                                }
+                            }
+                        }
+                    }
+
+                    val remoteConfig = com.example.integration.cloudinary.CloudinaryConfig(
+                        cloudName = remoteDoc.getString("cloudName") ?: "",
+                        uploadPreset = remoteDoc.getString("uploadPreset") ?: "",
+                        apiKey = remoteDoc.getString("apiKey") ?: "",
+                        apiSecret = remoteDoc.getString("apiSecret") ?: "",
+                        accounts = parsedAccounts
+                    )
+                    _uiState.update { it.copy(cloudinaryConfig = remoteConfig) }
+                    return@launch
+                }
+            } catch (_: Exception) {}
+
+            val config = com.example.integration.cloudinary.CloudinaryConfigManager.getConfig(context)
+            _uiState.update { it.copy(cloudinaryConfig = config) }
+        }
         viewModelScope.launch {
             AnonymousCloudBackupManager.refreshCloudQuota(context)
         }

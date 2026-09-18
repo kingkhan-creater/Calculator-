@@ -181,6 +181,17 @@
               <span class="stat-hint">Email / Auth accounts</span>
             </div>
           </div>
+
+          <div class="stat-card" style="border: 1px solid rgba(234, 179, 8, 0.3); background: linear-gradient(135deg, rgba(234,179,8,0.08) 0%, rgba(15,23,42,0.6) 100%);">
+            <div class="stat-icon" style="background: linear-gradient(135deg, rgba(234,179,8,0.25), rgba(234,179,8,0.1)); color: #eab308;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+            </div>
+            <div class="stat-content">
+              <span class="stat-label" style="color: #eab308;">💎 Premium Users</span>
+              <span class="stat-number" id="dashPremiumUsers" style="color: #eab308;">0</span>
+              <span class="stat-hint">Active VIP subscribers</span>
+            </div>
+          </div>
         </div>
 
         <!-- Storage Quota Gauge Card -->
@@ -434,6 +445,8 @@
               <span class="stat-hint">Remaining in free tier</span>
             </div>
           </div>
+        </div>
+
         <!-- Dynamic Limits Remote Config Card -->
         <div class="card card-margin">
           <div class="card-header">
@@ -553,36 +566,157 @@
           </div>
         </div>
 
-        <!-- Dynamic Cloudinary Configuration Card -->
+        <!-- Multi-Account Cloudinary Configuration Pool (5 Accounts) -->
         <div class="card card-margin">
           <div class="card-header">
             <div>
-              <h3>Dynamic Cloudinary Media Cloud Configuration</h3>
-              <p class="card-subtitle">Manage media storage credentials remotely. Switch to a new Cloudinary account anytime when free credits expire without recompiling the APK.</p>
+              <h3>Dynamic Cloudinary Multi-Account Pool (Up to 5 Accounts)</h3>
+              <p class="card-subtitle">Add up to 5 Cloudinary accounts & presets. The Android app automatically rotates and fails over between them, ensuring 100% uninterrupted zero-error uploads and downloads for all users!</p>
             </div>
-            <span class="badge badge-success">Live Media Server</span>
+            <span class="badge badge-success">5 Account Auto-Failover</span>
           </div>
+
           <form id="cloudinaryConfigForm">
-            <div class="grid-form">
-              <div class="form-group">
-                <label for="cloudNameInput">Cloudinary Cloud Name</label>
-                <input type="text" id="cloudNameInput" class="input-control" placeholder="e.g. dp7j6mtdb" />
+            <div id="cloudinaryAccountsContainer">
+              <!-- Account 1 -->
+              <div class="card card-margin" style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(148, 163, 184, 0.2); padding: 16px; border-radius: 12px; margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                  <h4 style="color: #38bdf8; margin: 0; display: flex; align-items: center; gap: 8px;">
+                    <span style="background: #0284c7; color: white; border-radius: 50%; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px;">1</span>
+                    Account 1 (Primary)
+                  </h4>
+                  <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: #94a3b8; font-size: 0.85rem;">
+                    <input type="checkbox" id="cld_enabled_0" checked /> Enabled / Active
+                  </label>
+                </div>
+                <div class="grid-form">
+                  <div class="form-group">
+                    <label for="cld_cloudName_0">Cloud Name *</label>
+                    <input type="text" id="cld_cloudName_0" class="input-control" placeholder="e.g. dp7j6mtdb" />
+                  </div>
+                  <div class="form-group">
+                    <label for="cld_preset_0">Unsigned Upload Preset *</label>
+                    <input type="text" id="cld_preset_0" class="input-control" placeholder="e.g. vault_unsigned_preset" />
+                  </div>
+                  <div class="form-group">
+                    <label for="cld_label_0">Account Label (Optional)</label>
+                    <input type="text" id="cld_label_0" class="input-control" placeholder="e.g. Asad Main (25GB)" />
+                  </div>
+                </div>
               </div>
-              <div class="form-group">
-                <label for="uploadPresetInput">Unsigned Upload Preset</label>
-                <input type="text" id="uploadPresetInput" class="input-control" placeholder="e.g. vault_unsigned_preset" />
+
+              <!-- Account 2 -->
+              <div class="card card-margin" style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(148, 163, 184, 0.2); padding: 16px; border-radius: 12px; margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                  <h4 style="color: #38bdf8; margin: 0; display: flex; align-items: center; gap: 8px;">
+                    <span style="background: #0284c7; color: white; border-radius: 50%; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px;">2</span>
+                    Account 2 (Backup Pool)
+                  </h4>
+                  <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: #94a3b8; font-size: 0.85rem;">
+                    <input type="checkbox" id="cld_enabled_1" /> Enabled / Active
+                  </label>
+                </div>
+                <div class="grid-form">
+                  <div class="form-group">
+                    <label for="cld_cloudName_1">Cloud Name</label>
+                    <input type="text" id="cld_cloudName_1" class="input-control" placeholder="e.g. vaultmedia2" />
+                  </div>
+                  <div class="form-group">
+                    <label for="cld_preset_1">Unsigned Upload Preset</label>
+                    <input type="text" id="cld_preset_1" class="input-control" placeholder="e.g. preset_acc2" />
+                  </div>
+                  <div class="form-group">
+                    <label for="cld_label_1">Account Label (Optional)</label>
+                    <input type="text" id="cld_label_1" class="input-control" placeholder="e.g. Backup Account 2 (25GB)" />
+                  </div>
+                </div>
               </div>
-              <div class="form-group">
-                <label for="apiKeyInput">API Key (Optional / Signed)</label>
-                <input type="text" id="apiKeyInput" class="input-control" placeholder="e.g. 664263214121165" />
+
+              <!-- Account 3 -->
+              <div class="card card-margin" style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(148, 163, 184, 0.2); padding: 16px; border-radius: 12px; margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                  <h4 style="color: #38bdf8; margin: 0; display: flex; align-items: center; gap: 8px;">
+                    <span style="background: #0284c7; color: white; border-radius: 50%; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px;">3</span>
+                    Account 3 (Backup Pool)
+                  </h4>
+                  <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: #94a3b8; font-size: 0.85rem;">
+                    <input type="checkbox" id="cld_enabled_2" /> Enabled / Active
+                  </label>
+                </div>
+                <div class="grid-form">
+                  <div class="form-group">
+                    <label for="cld_cloudName_2">Cloud Name</label>
+                    <input type="text" id="cld_cloudName_2" class="input-control" placeholder="e.g. vaultmedia3" />
+                  </div>
+                  <div class="form-group">
+                    <label for="cld_preset_2">Unsigned Upload Preset</label>
+                    <input type="text" id="cld_preset_2" class="input-control" placeholder="e.g. preset_acc3" />
+                  </div>
+                  <div class="form-group">
+                    <label for="cld_label_2">Account Label (Optional)</label>
+                    <input type="text" id="cld_label_2" class="input-control" placeholder="e.g. Backup Account 3 (25GB)" />
+                  </div>
+                </div>
               </div>
-              <div class="form-group">
-                <label for="apiSecretInput">API Secret (Server Functions)</label>
-                <input type="password" id="apiSecretInput" class="input-control" placeholder="••••••••••••••••" />
+
+              <!-- Account 4 -->
+              <div class="card card-margin" style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(148, 163, 184, 0.2); padding: 16px; border-radius: 12px; margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                  <h4 style="color: #38bdf8; margin: 0; display: flex; align-items: center; gap: 8px;">
+                    <span style="background: #0284c7; color: white; border-radius: 50%; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px;">4</span>
+                    Account 4 (Backup Pool)
+                  </h4>
+                  <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: #94a3b8; font-size: 0.85rem;">
+                    <input type="checkbox" id="cld_enabled_3" /> Enabled / Active
+                  </label>
+                </div>
+                <div class="grid-form">
+                  <div class="form-group">
+                    <label for="cld_cloudName_3">Cloud Name</label>
+                    <input type="text" id="cld_cloudName_3" class="input-control" placeholder="e.g. vaultmedia4" />
+                  </div>
+                  <div class="form-group">
+                    <label for="cld_preset_3">Unsigned Upload Preset</label>
+                    <input type="text" id="cld_preset_3" class="input-control" placeholder="e.g. preset_acc4" />
+                  </div>
+                  <div class="form-group">
+                    <label for="cld_label_3">Account Label (Optional)</label>
+                    <input type="text" id="cld_label_3" class="input-control" placeholder="e.g. Backup Account 4 (25GB)" />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Account 5 -->
+              <div class="card card-margin" style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(148, 163, 184, 0.2); padding: 16px; border-radius: 12px; margin-bottom: 16px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                  <h4 style="color: #38bdf8; margin: 0; display: flex; align-items: center; gap: 8px;">
+                    <span style="background: #0284c7; color: white; border-radius: 50%; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px;">5</span>
+                    Account 5 (Backup Pool)
+                  </h4>
+                  <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: #94a3b8; font-size: 0.85rem;">
+                    <input type="checkbox" id="cld_enabled_4" /> Enabled / Active
+                  </label>
+                </div>
+                <div class="grid-form">
+                  <div class="form-group">
+                    <label for="cld_cloudName_4">Cloud Name</label>
+                    <input type="text" id="cld_cloudName_4" class="input-control" placeholder="e.g. vaultmedia5" />
+                  </div>
+                  <div class="form-group">
+                    <label for="cld_preset_4">Unsigned Upload Preset</label>
+                    <input type="text" id="cld_preset_4" class="input-control" placeholder="e.g. preset_acc5" />
+                  </div>
+                  <div class="form-group">
+                    <label for="cld_label_4">Account Label (Optional)</label>
+                    <input type="text" id="cld_label_4" class="input-control" placeholder="e.g. Backup Account 5 (25GB)" />
+                  </div>
+                </div>
               </div>
             </div>
-            <button type="submit" id="btnSaveCloudinary" class="btn btn-primary">
-              Save Cloudinary Credentials to Cloud
+
+            <button type="submit" id="btnSaveCloudinary" class="btn btn-primary" style="margin-top: 10px; width: 100%;">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+              Save 5-Account Cloudinary Pool to Cloud
             </button>
           </form>
         </div>

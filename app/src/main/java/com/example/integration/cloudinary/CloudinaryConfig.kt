@@ -3,14 +3,36 @@ package com.example.integration.cloudinary
 import android.content.Context
 import java.security.MessageDigest
 
+data class CloudinaryAccount(
+    val cloudName: String = "",
+    val uploadPreset: String = "",
+    val label: String = "",
+    val enabled: Boolean = true
+) {
+    val isValid: Boolean
+        get() = cloudName.isNotBlank() && uploadPreset.isNotBlank() && enabled
+}
+
 data class CloudinaryConfig(
     val cloudName: String = "",
     val uploadPreset: String = "",
     val apiKey: String = "",
-    val apiSecret: String = ""
+    val apiSecret: String = "",
+    val accounts: List<CloudinaryAccount> = emptyList()
 ) {
     val isConfigured: Boolean
-        get() = cloudName.isNotBlank() && (uploadPreset.isNotBlank() || (apiKey.isNotBlank() && apiSecret.isNotBlank()))
+        get() = (cloudName.isNotBlank() && uploadPreset.isNotBlank()) || accounts.any { it.isValid }
+
+    /**
+     * Returns an ordered list of active Cloudinary accounts for resilient failover.
+     */
+    fun getActiveAccountsPool(): List<CloudinaryAccount> {
+        val pool = accounts.filter { it.isValid }.toMutableList()
+        if (pool.isEmpty() && cloudName.isNotBlank() && uploadPreset.isNotBlank()) {
+            pool.add(CloudinaryAccount(cloudName, uploadPreset, "Primary", true))
+        }
+        return pool
+    }
 }
 
 object CloudinaryConfigManager {

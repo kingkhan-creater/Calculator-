@@ -44,64 +44,97 @@ class CloudinaryServiceImpl(
             val folder = "users/$uid/vault_media"
             val publicId = "users/$uid/vault_media/$mediaId"
 
-            // 1. Check local Cloudinary configuration
-            var config = context?.let { CloudinaryConfigManager.getConfig(it) } ?: CloudinaryConfig()
-
-            // 2. If not configured locally, attempt to read from Firestore (system_config/cloudinary)
-            if (!config.isConfigured) {
-                try {
-                    val remoteDoc = firestore.collection("system_config").document("cloudinary").get().await()
-                    if (remoteDoc.exists()) {
-                        config = CloudinaryConfig(
-                            cloudName = remoteDoc.getString("cloudName") ?: "",
-                            uploadPreset = remoteDoc.getString("uploadPreset") ?: "",
-                            apiKey = remoteDoc.getString("apiKey") ?: "",
-                            apiSecret = remoteDoc.getString("apiSecret") ?: ""
-                        )
+            // 1. Fetch live Cloudinary configuration from Firestore (system_config/cloudinary)
+            var config = CloudinaryConfig()
+            try {
+                val remoteDoc = firestore.collection("system_config").document("cloudinary").get().await()
+                if (remoteDoc.exists()) {
+                    val rawAccounts = remoteDoc.get("accounts") as? List<*>
+                    val parsedAccounts = mutableListOf<CloudinaryAccount>()
+                    if (rawAccounts != null) {
+                        for (item in rawAccounts) {
+                            if (item is Map<*, *>) {
+                                val cName = item["cloudName"]?.toString() ?: ""
+                                val preset = item["uploadPreset"]?.toString() ?: ""
+                                val label = item["label"]?.toString() ?: ""
+                                val enabled = item["enabled"] as? Boolean ?: true
+                                if (cName.isNotBlank() && preset.isNotBlank()) {
+                                    parsedAccounts.add(CloudinaryAccount(cName, preset, label, enabled))
+                                }
+                            }
+                        }
                     }
-                } catch (_: Exception) {}
+
+                    config = CloudinaryConfig(
+                        cloudName = remoteDoc.getString("cloudName") ?: "",
+                        uploadPreset = remoteDoc.getString("uploadPreset") ?: "",
+                        apiKey = remoteDoc.getString("apiKey") ?: "",
+                        apiSecret = remoteDoc.getString("apiSecret") ?: "",
+                        accounts = parsedAccounts
+                    )
+                }
+            } catch (_: Exception) {}
+
+            // Fallback to local user config if remote is empty
+            if (!config.isConfigured && context != null) {
+                config = CloudinaryConfigManager.getConfig(context)
             }
 
-            // Path A: Unsigned Upload Preset (Zero backend / Cloud Functions required!)
-            if (config.cloudName.isNotBlank() && config.uploadPreset.isNotBlank()) {
-                val url = "https://api.cloudinary.com/v1_1/${config.cloudName}/auto/upload"
-                val requestBodyBuilder = MultipartBody.Builder()
-                    .setType(MultipartBody.FORM)
-                    .addFormDataPart("file", actualFileName, fileBytes.toRequestBody(mimeType.toMediaTypeOrNull()))
-                    .addFormDataPart("upload_preset", config.uploadPreset)
-                    .addFormDataPart("folder", folder)
-                    .addFormDataPart("public_id", mediaId)
+            // 2. Multi-Account Pool Auto-Failover Upload (Tries up to 5 presets seamlessly!)
+            val pool = config.getActiveAccountsPool()
+            if (pool.isNotEmpty()) {
+                var lastErrorMessage = ""
+                for (account in pool) {
+                    try {
+                        val url = "https://api.cloudinary.com/v1_1/${account.cloudName}/auto/upload"
+                        val requestBodyBuilder = MultipartBody.Builder()
+                            .setType(MultipartBody.FORM)
+                            .addFormDataPart("file", actualFileName, fileBytes.toRequestBody(mimeType.toMediaTypeOrNull()))
+                            .addFormDataPart("upload_preset", account.uploadPreset)
+                            .addFormDataPart("folder", folder)
+                            .addFormDataPart("public_id", mediaId)
 
-                val request = Request.Builder()
-                    .url(url)
-                    .post(requestBodyBuilder.build())
-                    .build()
+                        val request = Request.Builder()
+                            .url(url)
+                            .post(requestBodyBuilder.build())
+                            .build()
 
-                val response = okHttpClient.newCall(request).execute()
-                val responseBodyString = response.body?.string() ?: ""
+                        val response = okHttpClient.newCall(request).execute()
+                        val responseBodyString = response.body?.string() ?: ""
 
-                if (!response.isSuccessful) {
-                    val errorMsg = try {
-                        val errObj = JSONObject(responseBodyString)
-                        errObj.optJSONObject("error")?.optString("message") ?: responseBodyString
-                    } catch (_: Exception) { responseBodyString }
-                    return@withContext Result.failure(IOException("Cloudinary upload failed ($errorMsg)"))
+                        if (response.isSuccessful) {
+                            val jsonObject = JSONObject(responseBodyString)
+                            val resPublicId = jsonObject.optString("public_id", publicId)
+                            val secureUrl = jsonObject.optString("secure_url", "")
+                            val assetType = jsonObject.optString("resource_type", "auto")
+                            val bytes = jsonObject.optLong("bytes", fileBytes.size.toLong())
+
+                            // Successfully uploaded to account! Return immediately without throwing error
+                            return@withContext Result.success(
+                                CloudinaryUploadResult(
+                                    publicId = resPublicId,
+                                    secureUrl = secureUrl,
+                                    assetType = assetType,
+                                    bytes = bytes
+                                )
+                            )
+                        } else {
+                            val errorMsg = try {
+                                val errObj = JSONObject(responseBodyString)
+                                errObj.optJSONObject("error")?.optString("message") ?: responseBodyString
+                            } catch (_: Exception) { responseBodyString }
+                            lastErrorMessage = "Account (${account.cloudName}): $errorMsg"
+                            // Quota exceeded or error in this account -> continue to next account in pool!
+                        }
+                    } catch (netEx: Exception) {
+                        lastErrorMessage = "Account (${account.cloudName}): ${netEx.message}"
+                        // Network/timeout error -> failover to next account in pool
+                    }
                 }
 
-                val jsonObject = JSONObject(responseBodyString)
-                val resPublicId = jsonObject.optString("public_id", publicId)
-                val secureUrl = jsonObject.optString("secure_url", "")
-                val assetType = jsonObject.optString("resource_type", "auto")
-                val bytes = jsonObject.optLong("bytes", fileBytes.size.toLong())
-
-                return@withContext Result.success(
-                    CloudinaryUploadResult(
-                        publicId = resPublicId,
-                        secureUrl = secureUrl,
-                        assetType = assetType,
-                        bytes = bytes
-                    )
-                )
+                if (lastErrorMessage.isNotBlank()) {
+                    return@withContext Result.failure(IOException("Upload failed across pool: $lastErrorMessage"))
+                }
             }
 
             // Path B: Local Signed Upload (using API Key + API Secret)

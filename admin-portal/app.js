@@ -971,50 +971,97 @@ if (dynamicLimitsForm) {
   });
 }
 
-// --- 11. Cloudinary Remote Config ---
+// --- 11. Multi-Account Cloudinary Remote Config (Up to 5 Accounts) ---
 async function loadCloudinaryConfig() {
   try {
     const docSnap = await getDoc(doc(db, "system_config", "cloudinary"));
     if (docSnap.exists()) {
       const data = docSnap.data();
-      if (cloudNameInput) cloudNameInput.value = data.cloudName || "";
-      if (uploadPresetInput) uploadPresetInput.value = data.uploadPreset || "";
-      if (apiKeyInput) apiKeyInput.value = data.apiKey || "";
-      if (apiSecretInput) apiSecretInput.value = data.apiSecret || "";
+      const accounts = Array.isArray(data.accounts) ? data.accounts : [];
+
+      for (let i = 0; i < 5; i++) {
+        const cNameEl = document.getElementById(`cld_cloudName_${i}`);
+        const presetEl = document.getElementById(`cld_preset_${i}`);
+        const labelEl = document.getElementById(`cld_label_${i}`);
+        const enabledEl = document.getElementById(`cld_enabled_${i}`);
+
+        if (accounts[i]) {
+          if (cNameEl) cNameEl.value = accounts[i].cloudName || "";
+          if (presetEl) presetEl.value = accounts[i].uploadPreset || "";
+          if (labelEl) labelEl.value = accounts[i].label || "";
+          if (enabledEl) enabledEl.checked = accounts[i].enabled !== false;
+        } else if (i === 0 && data.cloudName) {
+          // Backward compatibility for legacy single-account document
+          if (cNameEl) cNameEl.value = data.cloudName || "";
+          if (presetEl) presetEl.value = data.uploadPreset || "";
+          if (labelEl) labelEl.value = "Primary Account";
+          if (enabledEl) enabledEl.checked = true;
+        }
+      }
     }
   } catch (err) {
-    console.warn("Could not load Cloudinary config:", err);
+    console.warn("Could not load Cloudinary config pool:", err);
   }
 }
 
 if (cloudinaryConfigForm) {
   cloudinaryConfigForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const cloudName = cloudNameInput.value.trim();
-    const uploadPreset = uploadPresetInput.value.trim();
-    const apiKey = apiKeyInput.value.trim();
-    const apiSecret = apiSecretInput.value.trim();
 
-    if (!cloudName) {
-      alert("Please enter at least Cloud Name.");
+    const accounts = [];
+    for (let i = 0; i < 5; i++) {
+      const cNameEl = document.getElementById(`cld_cloudName_${i}`);
+      const presetEl = document.getElementById(`cld_preset_${i}`);
+      const labelEl = document.getElementById(`cld_label_${i}`);
+      const enabledEl = document.getElementById(`cld_enabled_${i}`);
+
+      const cloudName = cNameEl ? cNameEl.value.trim() : "";
+      const uploadPreset = presetEl ? presetEl.value.trim() : "";
+      const label = labelEl ? labelEl.value.trim() : `Account ${i + 1}`;
+      const enabled = enabledEl ? enabledEl.checked : false;
+
+      if (cloudName && uploadPreset) {
+        accounts.push({
+          id: `acc_${i + 1}`,
+          index: i,
+          cloudName,
+          uploadPreset,
+          label: label || `Account ${i + 1}`,
+          enabled: enabled
+        });
+      }
+    }
+
+    if (accounts.length === 0) {
+      alert("Please enter at least Account 1 Cloud Name and Upload Preset.");
       return;
     }
 
+    // First active account becomes primary for backward compatibility
+    const primary = accounts.find(a => a.enabled) || accounts[0];
+
     const payload = {
-      cloudName,
-      uploadPreset,
-      apiKey,
-      apiSecret,
+      // Legacy fields for backward compatibility with older app versions
+      cloudName: primary.cloudName,
+      uploadPreset: primary.uploadPreset,
       isActive: true,
+
+      // Multi-account pool for new resilient app versions
+      accounts: accounts,
+      rotationMode: "AUTO_FAILOVER", // Android app tries active accounts sequentially
+      totalAccounts: accounts.length,
       updatedAt: Date.now()
     };
 
     try {
       await setDoc(doc(db, "system_config", "cloudinary"), payload, { merge: true });
-      await recordAuditLog("UPDATE_CLOUDINARY_CONFIG", cloudName, { uploadPreset });
-      showToast("Cloudinary settings synced successfully!");
+      await recordAuditLog("UPDATE_CLOUDINARY_POOL", `${accounts.length} Accounts Configured`, {
+        accounts: accounts.map(a => `${a.label} (${a.cloudName}) - ${a.enabled ? 'Active' : 'Disabled'}`)
+      });
+      showToast(`Saved! ${accounts.length} Cloudinary accounts synced with Auto-Failover.`);
     } catch (err) {
-      alert("Error saving Cloudinary config: " + err.message);
+      alert("Error saving Cloudinary config pool: " + err.message);
     }
   });
 }
+
