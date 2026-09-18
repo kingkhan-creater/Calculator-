@@ -25,6 +25,9 @@ import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 
 data class CloudMediaItemDisplay(
     val mediaId: String,
@@ -274,14 +277,16 @@ class CloudBackupViewModel(
                     }
                 } else {
                     try {
-                        val fileBytes = withContext(Dispatchers.IO) {
+                        val rawBytes = withContext(Dispatchers.IO) {
                             item.file.readBytes()
                         }
+                        val (fileBytes, uploadMimeType) = compressMediaBytes(rawBytes, item.mimeType)
+                        val uploadSizeBytes = fileBytes.size.toLong()
 
                         val uploadResult = cloudinaryService.uploadMedia(
                             mediaId = item.id,
                             fileBytes = fileBytes,
-                            mimeType = item.mimeType,
+                            mimeType = uploadMimeType,
                             fileName = item.fileName
                         )
 
@@ -296,7 +301,7 @@ class CloudBackupViewModel(
                                 "mediaId" to item.id,
                                 "fileName" to item.fileName,
                                 "mediaType" to (if (item.mediaType.name == "VIDEO") "VIDEO" else "PHOTO"),
-                                "sizeBytes" to item.sizeBytes,
+                                "sizeBytes" to uploadSizeBytes,
                                 "durationMs" to item.durationMs,
                                 "folderId" to (item.folderId ?: ""),
                                 "isEncryptedLocally" to false,
@@ -322,8 +327,8 @@ class CloudBackupViewModel(
                                 "downloadUrl" to result.secureUrl,
                                 "cloudinarySecureUrl" to result.secureUrl,
                                 "cloudinaryPublicId" to result.publicId,
-                                "fileSize" to item.sizeBytes,
-                                "sizeBytes" to item.sizeBytes,
+                                "fileSize" to uploadSizeBytes,
+                                "sizeBytes" to uploadSizeBytes,
                                 "duration" to (item.durationMs / 1000).toInt(),
                                 "durationMs" to item.durationMs,
                                 "createdAt" to System.currentTimeMillis()
@@ -513,6 +518,44 @@ class CloudBackupViewModel(
 
     fun clearMessages() {
         _uiState.update { it.copy(errorMessage = null, successMessage = null) }
+    }
+
+    private fun compressMediaBytes(rawBytes: ByteArray, mimeType: String): Pair<ByteArray, String> {
+        if (!mimeType.startsWith("image/", ignoreCase = true)) {
+            return Pair(rawBytes, mimeType)
+        }
+        return try {
+            val boundsOptions = BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
+            BitmapFactory.decodeByteArray(rawBytes, 0, rawBytes.size, boundsOptions)
+
+            val maxDimension = 1920
+            var sampleSize = 1
+            while ((boundsOptions.outWidth / sampleSize) > maxDimension || (boundsOptions.outHeight / sampleSize) > maxDimension) {
+                sampleSize *= 2
+            }
+
+            val decodeOptions = BitmapFactory.Options().apply {
+                inSampleSize = sampleSize
+                inPreferredConfig = Bitmap.Config.RGB_565
+            }
+            val bitmap = BitmapFactory.decodeByteArray(rawBytes, 0, rawBytes.size, decodeOptions)
+                ?: return Pair(rawBytes, mimeType)
+
+            val outputStream = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 75, outputStream)
+            bitmap.recycle()
+            val compressedBytes = outputStream.toByteArray()
+
+            if (compressedBytes.size < rawBytes.size) {
+                Pair(compressedBytes, "image/jpeg")
+            } else {
+                Pair(rawBytes, mimeType)
+            }
+        } catch (e: Exception) {
+            Pair(rawBytes, mimeType)
+        }
     }
 
     class Factory(

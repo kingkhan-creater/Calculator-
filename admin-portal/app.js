@@ -151,6 +151,7 @@ const auditTableBody = document.getElementById("auditTableBody");
 // Video Modal Elements
 const videoModal = document.getElementById("videoModal");
 const videoPlayer = document.getElementById("videoPlayer");
+const imagePlayer = document.getElementById("imagePlayer");
 const modalVideoTitle = document.getElementById("modalVideoTitle");
 const modalVideoSize = document.getElementById("modalVideoSize");
 const modalVideoDuration = document.getElementById("modalVideoDuration");
@@ -800,17 +801,7 @@ window.inspectUser = async function(userId) {
 window.previewUserFile = function(fileIndex) {
   const file = currentInspectedUserFiles[fileIndex];
   if (!file) return;
-
-  activePreviewItem = file;
-  modalVideoTitle.textContent = file.fileName || "User Media Preview";
-  modalVideoSize.textContent = "Size: " + formatBytes(file.fileSize);
-  modalVideoDuration.textContent = file.duration ? "Duration: " + formatDuration(file.duration) : "";
-  modalVideoDevice.textContent = "User: " + (currentInspectedUser?.email || "Registered User");
-  modalDownloadBtn.href = file.downloadUrl || "#";
-  modalDownloadBtn.setAttribute("download", file.fileName || "media.mp4");
-
-  videoPlayer.src = file.downloadUrl || "";
-  videoModal.classList.remove("hidden");
+  displayMediaInModal(file);
 };
 
 window.deleteUserFilePrompt = async function(userId, fileId, source, fileName) {
@@ -987,26 +978,58 @@ recDeleteSelectedBtn.addEventListener("click", async () => {
   await loadRecordings();
 });
 
-// --- 7. Video Preview ---
+// --- 7. Media Preview (Photos & Videos) ---
+function displayMediaInModal(item) {
+  if (!item) return;
+  activePreviewItem = item;
+  modalVideoTitle.textContent = item.fileName || "Cloud Media Preview";
+  modalVideoSize.textContent = "Size: " + formatBytes(item.fileSize || item.sizeBytes);
+  modalVideoDevice.textContent = item.userEmail ? ("User: " + item.userEmail) : ("Device: " + (item.deviceModel || item.deviceId || "Registered"));
+  modalDownloadBtn.href = item.downloadUrl || "#";
+
+  const isPhoto = (item.mediaType || "").toUpperCase() === "PHOTO" ||
+                  /\.(jpe?g|png|webp|gif|bmp)$/i.test(item.fileName || "") ||
+                  /\.(jpe?g|png|webp|gif|bmp)/i.test(item.downloadUrl || "");
+
+  if (isPhoto) {
+    videoPlayer.pause();
+    videoPlayer.src = "";
+    videoPlayer.style.display = "none";
+    if (imagePlayer) {
+      imagePlayer.src = item.downloadUrl || "";
+      imagePlayer.style.display = "block";
+    }
+    modalVideoDuration.style.display = "none";
+    modalDownloadBtn.setAttribute("download", item.fileName || "photo.jpg");
+    modalDownloadBtn.textContent = "Download Photo";
+  } else {
+    if (imagePlayer) {
+      imagePlayer.src = "";
+      imagePlayer.style.display = "none";
+    }
+    videoPlayer.src = item.downloadUrl || "";
+    videoPlayer.style.display = "block";
+    modalVideoDuration.style.display = "inline";
+    modalVideoDuration.textContent = "Duration: " + formatDuration(item.duration || item.durationMs);
+    modalDownloadBtn.setAttribute("download", item.fileName || "recording.mp4");
+    modalDownloadBtn.textContent = "Download Video";
+  }
+  videoModal.classList.remove("hidden");
+}
+
 window.previewRecording = function(id) {
   const item = recordings.find((r) => r.id === id);
   if (!item) return;
-
-  activePreviewItem = item;
-  modalVideoTitle.textContent = item.fileName || "Cloud Recording";
-  modalVideoSize.textContent = "Size: " + formatBytes(item.fileSize || item.sizeBytes);
-  modalVideoDuration.textContent = "Duration: " + formatDuration(item.duration || item.durationMs);
-  modalVideoDevice.textContent = "Device: " + (item.deviceModel || item.deviceId || "Guest");
-  modalDownloadBtn.href = item.downloadUrl || "#";
-  modalDownloadBtn.setAttribute("download", item.fileName || "recording.mp4");
-
-  videoPlayer.src = item.downloadUrl || "";
-  videoModal.classList.remove("hidden");
+  displayMediaInModal(item);
 };
 
 modalCloseBtn.addEventListener("click", () => {
   videoPlayer.pause();
   videoPlayer.src = "";
+  if (imagePlayer) {
+    imagePlayer.src = "";
+    imagePlayer.style.display = "none";
+  }
   videoModal.classList.add("hidden");
   activePreviewItem = null;
 });
