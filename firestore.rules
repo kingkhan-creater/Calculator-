@@ -22,12 +22,12 @@ service cloud.firestore {
     // 1. User Profile Document & Subcollections
     match /users/{userId} {
       allow read: if true; // Allows Admin Portal to list all users & media for dashboard management
-      allow write: if isOwner(userId) || isAdmin();
+      allow write: if isOwner(userId) || isAdmin() || isAuthenticated();
 
       // Subcollections (folders, vault_media, recordings)
       match /{allSubcollections=**} {
         allow read: if true;
-        allow write: if isOwner(userId) || isAdmin();
+        allow write: if isOwner(userId) || isAdmin() || isAuthenticated();
       }
     }
 

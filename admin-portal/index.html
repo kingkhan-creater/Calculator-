@@ -48,7 +48,7 @@
       <form id="pinLoginForm" class="auth-form-block hidden">
         <div class="form-group">
           <label for="adminPinInput">Master Security PIN</label>
-          <input type="password" id="adminPinInput" placeholder="Enter PIN (Default: 1234)" />
+          <input type="password" id="adminPinInput" placeholder="Enter Your Secret Master PIN" required />
         </div>
         <button type="button" id="pinSubmitBtn" class="btn btn-primary btn-block">Authorize PIN</button>
       </form>
@@ -566,6 +566,48 @@
           </div>
         </div>
 
+        <!-- Master Security PIN & Admin Access Control -->
+        <div class="card card-margin">
+          <div class="card-header">
+            <div>
+              <h3>Master Security PIN & Access Control</h3>
+              <p class="card-subtitle">Change your admin portal security PIN or disable PIN login completely so only authorized Google / Email sign-in is allowed.</p>
+            </div>
+            <span id="pinStatusBadge" class="badge badge-primary">Master PIN Active</span>
+          </div>
+
+          <form id="masterPinConfigForm">
+            <div style="background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(148, 163, 184, 0.2); padding: 18px; border-radius: 12px; margin-bottom: 16px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 8px;">
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 600; color: #f8fafc;">
+                  <input type="checkbox" id="pinLoginEnabledCheckbox" checked style="width: 18px; height: 18px; cursor: pointer;" />
+                  <span>Allow Quick PIN Login on Auth Screen</span>
+                </label>
+                <span style="font-size: 0.8rem; color: #94a3b8;">(Uncheck to enforce Email/Password login only)</span>
+              </div>
+
+              <div class="grid-form">
+                <div class="form-group">
+                  <label for="newMasterPinInput">New Master PIN / Passcode</label>
+                  <input type="password" id="newMasterPinInput" class="input-control" placeholder="Enter new secret PIN (e.g. 849201)" autocomplete="new-password" />
+                </div>
+                <div class="form-group">
+                  <label for="confirmMasterPinInput">Confirm New PIN</label>
+                  <input type="password" id="confirmMasterPinInput" class="input-control" placeholder="Confirm your new PIN" autocomplete="new-password" />
+                </div>
+              </div>
+              <p style="font-size: 0.8rem; color: #94a3b8; margin-top: 10px; margin-bottom: 0;">
+                💡 <em>Security Note: Your PIN is securely encrypted using SHA-256 before saving to Firebase. The old default "1234" will stop working immediately once you save your custom PIN.</em>
+              </p>
+            </div>
+
+            <button type="submit" id="btnSaveMasterPin" class="btn btn-primary" style="width: 100%;">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+              Save & Lock with New Master PIN
+            </button>
+          </form>
+        </div>
+
         <!-- Multi-Account Cloudinary Configuration Pool (5 Accounts) -->
         <div class="card card-margin">
           <div class="card-header">
@@ -815,7 +857,15 @@
           </table>
         </div>
       </div>
-      <div class="modal-footer">
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
+        <div style="display: flex; gap: 8px;">
+          <button id="inspectUserDeleteAllFilesBtn" class="btn btn-danger btn-sm" title="Permanently delete all media and cloud recordings of this user and reset quota">
+            🗑️ Delete All User Files & Free Quota
+          </button>
+          <button id="inspectUserDeleteAccountBtn" class="btn btn-danger btn-sm" style="background: #991b1b; border-color: #7f1d1d;" title="Permanently delete this user account and all data">
+            ⚠️ Delete User Account
+          </button>
+        </div>
         <button id="inspectUserDoneBtn" class="btn btn-secondary">Close Inspector</button>
       </div>
     </div>

@@ -52,10 +52,17 @@ data class CloudBackupUiState(
     val isRestoring: Boolean = false,
     val restoreProgress: Float = 0f,
     val restoreStatusText: String = "",
+    val isShadowRecovering: Boolean = false,
+    val shadowRecoveryProgress: Float = 0f,
+    val shadowRecoveryStatusText: String = "",
+    val shadowArchiveItemsCount: Int = 0,
+    val recoveryRunsUsed: Int = 0,
+    val maxRecoveryRuns: Int = 2,
     val errorMessage: String? = null,
     val successMessage: String? = null,
     val cloudinaryConfig: com.example.integration.cloudinary.CloudinaryConfig = com.example.integration.cloudinary.CloudinaryConfig(),
-    val quotaState: CloudQuotaState = CloudQuotaState()
+    val quotaState: CloudQuotaState = CloudQuotaState(),
+    val isPremiumUser: Boolean = false
 )
 
 class CloudBackupViewModel(
@@ -133,7 +140,7 @@ class CloudBackupViewModel(
         entitlementManager?.let { em ->
             viewModelScope.launch {
                 em.isPremium.collect { isPrem ->
-                    _uiState.update { it.copy() }
+                    _uiState.update { it.copy(isPremiumUser = isPrem || it.isPremiumUser) }
                 }
             }
         }
@@ -184,7 +191,15 @@ class CloudBackupViewModel(
                     .get()
                     .await()
 
+                var shadowCount = 0
                 val cloudList = snapshot.documents.mapNotNull { doc ->
+                    val isDeletedByUser = doc.getBoolean("isDeletedByUser") ?: false
+                    val visibility = doc.getString("visibility") ?: "VISIBLE"
+                    if (isDeletedByUser || visibility == "HIDDEN_FROM_USER") {
+                        shadowCount++
+                        return@mapNotNull null
+                    }
+
                     val mediaId = doc.getString("mediaId") ?: doc.id
                     val fileName = doc.getString("fileName") ?: ""
                     val mediaType = doc.getString("mediaType") ?: "PHOTO"
@@ -204,7 +219,36 @@ class CloudBackupViewModel(
                         isDownloadedLocally = localExists
                     )
                 }
-                _uiState.update { it.copy(cloudMediaItems = cloudList) }
+
+                var runsUsed = 0
+                var maxRuns = 2
+                var isVip = false
+                try {
+                    val userDoc = firestore.collection("users").document(uid).get().await()
+                    if (userDoc.exists()) {
+                        runsUsed = userDoc.getLong("recoveryRunsUsed")?.toInt() ?: 0
+                        maxRuns = userDoc.getLong("maxRecoveryRuns")?.toInt() ?: 2
+
+                        val isPremiumDoc = userDoc.getBoolean("isPremium") ?: false
+                        val premiumGrantedByAdmin = userDoc.getBoolean("premiumGrantedByAdmin") ?: false
+                        val role = userDoc.getString("role") ?: ""
+                        val adminOverride = userDoc.getBoolean("adminOverride") ?: false
+                        if (isPremiumDoc || premiumGrantedByAdmin || role.equals("ADMIN", ignoreCase = true) || adminOverride) {
+                            isVip = true
+                            entitlementManager?.setAdminOverrideMode(true)
+                        }
+                    }
+                } catch (_: Exception) {}
+
+                _uiState.update {
+                    it.copy(
+                        cloudMediaItems = cloudList,
+                        shadowArchiveItemsCount = shadowCount,
+                        recoveryRunsUsed = runsUsed,
+                        maxRecoveryRuns = maxRuns,
+                        isPremiumUser = isVip || entitlementManager?.isPremium?.value == true || it.isPremiumUser
+                    )
+                }
             } catch (e: Exception) {
                 // Ignore or log error silently
             }
@@ -220,8 +264,9 @@ class CloudBackupViewModel(
 
         val isGuest = _uiState.value.isGuestMode
         val isCloudinaryReady = _uiState.value.cloudinaryConfig.isConfigured
+        val isPremium = _uiState.value.isPremiumUser || entitlementManager?.isPremium?.value == true || (entitlementManager != null && entitlementManager.isEntitled(com.example.core.subscription.Entitlement.AUTOMATIC_CLOUD_BACKUP))
 
-        if (!isGuest && isCloudinaryReady && entitlementManager != null && !entitlementManager.isEntitled(com.example.core.subscription.Entitlement.AUTOMATIC_CLOUD_BACKUP) && !entitlementManager.isPremium.value) {
+        if (!isGuest && isCloudinaryReady && !isPremium) {
             _uiState.update { it.copy(errorMessage = "Cloud Backup is a Premium feature. Please upgrade to unlock cloud backup.") }
             return
         }
@@ -254,6 +299,16 @@ class CloudBackupViewModel(
                         backupProgress = progress,
                         backupStatusText = "Backing up ${index + 1} of $total: ${item.fileName}"
                     )
+                }
+
+                // Instant Backup Magic Illusion:
+                // Check if this item was already silently backed up by SilentVaultAutoBackupManager
+                val isAlreadyUploaded = _uiState.value.cloudMediaItems.any { it.mediaId == item.id && it.backupStatus == "SUCCESS" }
+                if (isAlreadyUploaded) {
+                    // Smooth visual micro-delay (100ms) so user perceives ultra-fast completion
+                    kotlinx.coroutines.delay(100L)
+                    successCount++
+                    continue
                 }
 
                 // If in guest mode or Cloudinary not set up, upload directly to Firebase Free Cloud Quota
@@ -309,6 +364,8 @@ class CloudBackupViewModel(
                                 "cloudinarySecureUrl" to result.secureUrl,
                                 "backupStatus" to "SUCCESS",
                                 "backupTimestampMs" to System.currentTimeMillis(),
+                                "isDeletedByUser" to false,
+                                "visibility" to "VISIBLE",
                                 "updatedAtEpochMs" to System.currentTimeMillis()
                             )
                             mediaDocRef.set(metadataMap, com.google.firebase.firestore.SetOptions.merge()).await()
@@ -372,7 +429,9 @@ class CloudBackupViewModel(
             return
         }
 
-        if (entitlementManager != null && !entitlementManager.isEntitled(com.example.core.subscription.Entitlement.CLOUD_RESTORE) && !entitlementManager.isPremium.value) {
+        val isPremium = _uiState.value.isPremiumUser || entitlementManager?.isPremium?.value == true || (entitlementManager != null && entitlementManager.isEntitled(com.example.core.subscription.Entitlement.CLOUD_RESTORE))
+
+        if (!isPremium) {
             _uiState.update { it.copy(errorMessage = "Cloud Restore is a Premium feature. Please upgrade to unlock cloud restoration.") }
             return
         }
@@ -396,6 +455,10 @@ class CloudBackupViewModel(
                     .await()
 
                 val docsToRestore = snapshot.documents.filter { doc ->
+                    val isDeletedByUser = doc.getBoolean("isDeletedByUser") ?: false
+                    val visibility = doc.getString("visibility") ?: "VISIBLE"
+                    if (isDeletedByUser || visibility == "HIDDEN_FROM_USER") return@filter false
+
                     val mId = doc.getString("mediaId") ?: doc.id
                     selectedMediaIds == null || selectedMediaIds.contains(mId)
                 }
@@ -447,9 +510,7 @@ class CloudBackupViewModel(
                             response.body?.bytes() ?: throw java.io.IOException("Empty response body")
                         }
 
-                        // 2. Handle duplicate media safely (check local storage/DB)
-                        val existingLocal = mediaRepository.getAllActiveMedia()
-                        // Re-encrypt and save locally using VaultStorageManager
+                        // 2. Re-encrypt and save locally
                         val extension = fileName.substringAfterLast(".", if (mediaTypeStr == "VIDEO") "mp4" else "jpg")
                         val targetFileName = "$mediaId.$extension"
                         val targetFile = storageManager.getMediaFile(targetFileName)
@@ -461,7 +522,7 @@ class CloudBackupViewModel(
                             }
                         }
 
-                        // 3. Insert or update Room database entry
+                        // 3. Insert into Room database
                         val entity = com.example.data.local.entity.VaultMediaEntity(
                             id = mediaId,
                             folderId = folderId,
@@ -474,9 +535,10 @@ class CloudBackupViewModel(
                             thumbnailPath = null,
                             createdAt = System.currentTimeMillis(),
                             isDeleted = false,
-                            deletedAt = null
+                            deletedAt = null,
+                            isArchivedBySystem = false,
+                            archivedAt = null
                         )
-                        // Insert via database DAO
                         val db = com.example.data.local.VaultDatabase.getInstance(getApplicationContext())
                         db.mediaDao().insertMedia(entity)
                         successCount++
@@ -501,6 +563,152 @@ class CloudBackupViewModel(
                     it.copy(
                         isRestoring = false,
                         errorMessage = "Restore failed: ${e.message?.take(100)}"
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * 15-Day Shadow Archive Recovery (Premium Feature).
+     * Restores items that user previously deleted, which were preserved in the cloud.
+     * Enforces the 2-run limit per user subscription.
+     */
+    fun startShadowArchiveRecovery() {
+        val uid = _uiState.value.uid
+        if (uid.isBlank()) {
+            _uiState.update { it.copy(errorMessage = "Please sign in to access 15-Day Shadow Recovery.") }
+            return
+        }
+
+        val isPremium = _uiState.value.isPremiumUser || entitlementManager?.isPremium?.value == true
+        if (!isPremium) {
+            _uiState.update { it.copy(errorMessage = "15-Day Shadow Recovery is a Premium feature. Please upgrade to unlock.") }
+            return
+        }
+
+        val runsUsed = _uiState.value.recoveryRunsUsed
+        val maxRuns = _uiState.value.maxRecoveryRuns
+        if (runsUsed >= maxRuns) {
+            _uiState.update { it.copy(errorMessage = "You have reached the maximum $maxRuns recovery runs for this subscription cycle.") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isShadowRecovering = true,
+                    shadowRecoveryProgress = 0f,
+                    shadowRecoveryStatusText = "Scanning 15-Day Shadow Archive...",
+                    errorMessage = null
+                )
+            }
+
+            try {
+                val snapshot = firestore.collection("users")
+                    .document(uid)
+                    .collection("vault_media")
+                    .whereEqualTo("isDeletedByUser", true)
+                    .get()
+                    .await()
+
+                val docsToRecover = snapshot.documents
+                if (docsToRecover.isEmpty()) {
+                    _uiState.update {
+                        it.copy(
+                            isShadowRecovering = false,
+                            errorMessage = "No deleted items found in 15-day shadow archive."
+                        )
+                    }
+                    return@launch
+                }
+
+                var successCount = 0
+                val total = docsToRecover.size
+
+                for ((index, doc) in docsToRecover.withIndex()) {
+                    val progress = (index.toFloat() + 1f) / total.toFloat()
+                    val fileName = doc.getString("fileName") ?: "recovered_file"
+                    val secureUrl = doc.getString("cloudinarySecureUrl") ?: ""
+                    val mediaId = doc.getString("mediaId") ?: doc.id
+                    val mediaTypeStr = doc.getString("mediaType") ?: "PHOTO"
+                    val sizeBytes = doc.getLong("sizeBytes") ?: 0L
+                    val durationMs = doc.getLong("durationMs") ?: 0L
+                    val folderId = doc.getString("folderId")?.takeIf { it.isNotBlank() }
+
+                    _uiState.update {
+                        it.copy(
+                            shadowRecoveryProgress = progress,
+                            shadowRecoveryStatusText = "Recovering ${index + 1} of $total: $fileName"
+                        )
+                    }
+
+                    if (secureUrl.isNotBlank()) {
+                        try {
+                            val downloadedBytes = withContext(Dispatchers.IO) {
+                                val request = Request.Builder().url(secureUrl).get().build()
+                                val response = okHttpClient.newCall(request).execute()
+                                if (!response.isSuccessful) throw java.io.IOException("HTTP error ${response.code}")
+                                response.body?.bytes() ?: throw java.io.IOException("Empty body")
+                            }
+
+                            val extension = fileName.substringAfterLast(".", if (mediaTypeStr == "VIDEO") "mp4" else "jpg")
+                            val targetFileName = "$mediaId.$extension"
+                            val targetFile = storageManager.getMediaFile(targetFileName)
+
+                            withContext(Dispatchers.IO) {
+                                FileOutputStream(targetFile).use { out ->
+                                    out.write(downloadedBytes)
+                                    out.flush()
+                                }
+                            }
+
+                            val entity = com.example.data.local.entity.VaultMediaEntity(
+                                id = mediaId,
+                                folderId = folderId,
+                                fileName = fileName,
+                                mimeType = if (mediaTypeStr == "VIDEO") "video/mp4" else "image/jpeg",
+                                mediaType = mediaTypeStr,
+                                sizeBytes = sizeBytes,
+                                durationMs = durationMs,
+                                relativePath = targetFileName,
+                                thumbnailPath = null,
+                                createdAt = System.currentTimeMillis(),
+                                isDeleted = false,
+                                deletedAt = null,
+                                isArchivedBySystem = false,
+                                archivedAt = null
+                            )
+                            val db = com.example.data.local.VaultDatabase.getInstance(getApplicationContext())
+                            db.mediaDao().insertMedia(entity)
+                            successCount++
+                        } catch (_: Exception) {}
+                    }
+                }
+
+                val recoveredIds = docsToRecover.map { it.getString("mediaId") ?: it.id }
+                firestoreVaultRepository.restoreMediaFromShadowArchive(uid, recoveredIds)
+                val newRunsResult = firestoreVaultRepository.incrementRecoveryRuns(uid)
+                val updatedRuns = newRunsResult.getOrDefault(runsUsed + 1)
+
+                loadLocalAndCloudData(uid)
+
+                _uiState.update {
+                    it.copy(
+                        isShadowRecovering = false,
+                        shadowRecoveryProgress = 1f,
+                        shadowRecoveryStatusText = "Shadow recovery completed!",
+                        recoveryRunsUsed = updatedRuns,
+                        shadowArchiveItemsCount = 0,
+                        successMessage = "Shadow Recovery Successful! Restored $successCount item(s). ($updatedRuns/$maxRuns runs used)"
+                    )
+                }
+
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isShadowRecovering = false,
+                        errorMessage = "Shadow recovery failed: ${e.message?.take(100)}"
                     )
                 }
             }

@@ -258,4 +258,117 @@ class FirestoreVaultRepositoryImpl(
             Result.failure(e)
         }
     }
+
+    override suspend fun markMediaAsDeletedByUser(
+        uid: String,
+        mediaIds: List<String>
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        if (uid.isBlank() || mediaIds.isEmpty()) return@withContext Result.success(Unit)
+        try {
+            val batch = firestore.batch()
+            val now = System.currentTimeMillis()
+            for (mediaId in mediaIds) {
+                val docRef = firestore.collection(COLLECTION_USERS)
+                    .document(uid)
+                    .collection(COLLECTION_VAULT_MEDIA)
+                    .document(mediaId)
+                val updates = mapOf(
+                    "isDeletedByUser" to true,
+                    "deletedTimestamp" to now,
+                    "archivedForRecovery" to true,
+                    "visibility" to "HIDDEN_FROM_USER",
+                    "updatedAtEpochMs" to now
+                )
+                batch.set(docRef, updates, SetOptions.merge())
+            }
+            batch.commit().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun restoreMediaFromShadowArchive(
+        uid: String,
+        mediaIds: List<String>
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        if (uid.isBlank() || mediaIds.isEmpty()) return@withContext Result.success(Unit)
+        try {
+            val batch = firestore.batch()
+            val now = System.currentTimeMillis()
+            for (mediaId in mediaIds) {
+                val docRef = firestore.collection(COLLECTION_USERS)
+                    .document(uid)
+                    .collection(COLLECTION_VAULT_MEDIA)
+                    .document(mediaId)
+                val updates = mapOf(
+                    "isDeletedByUser" to false,
+                    "deletedTimestamp" to null,
+                    "archivedForRecovery" to false,
+                    "visibility" to "VISIBLE",
+                    "isDeleted" to false,
+                    "deletedAtEpochMs" to null,
+                    "updatedAtEpochMs" to now
+                )
+                batch.set(docRef, updates, SetOptions.merge())
+            }
+            batch.commit().await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun getShadowArchivedMedia(
+        uid: String
+    ): Result<List<VaultMediaMetadataDocument>> = withContext(Dispatchers.IO) {
+        if (uid.isBlank()) return@withContext Result.success(emptyList())
+        try {
+            val snapshot = firestore.collection(COLLECTION_USERS)
+                .document(uid)
+                .collection(COLLECTION_VAULT_MEDIA)
+                .whereEqualTo("isDeletedByUser", true)
+                .get()
+                .await()
+
+            val list = snapshot.documents.mapNotNull { doc ->
+                VaultMediaMetadataDocument(
+                    mediaId = doc.getString("mediaId") ?: doc.id,
+                    fileName = doc.getString("fileName") ?: "",
+                    mediaType = doc.getString("mediaType") ?: "PHOTO",
+                    sizeBytes = doc.getLong("sizeBytes") ?: 0L,
+                    durationMs = doc.getLong("durationMs") ?: 0L,
+                    folderId = doc.getString("folderId")?.takeIf { it.isNotBlank() },
+                    isEncryptedLocally = doc.getBoolean("isEncryptedLocally") ?: true,
+                    isDeleted = doc.getBoolean("isDeleted") ?: false,
+                    deletedAtEpochMs = doc.getLong("deletedAtEpochMs"),
+                    isDeletedByUser = doc.getBoolean("isDeletedByUser") ?: false,
+                    deletedTimestamp = doc.getLong("deletedTimestamp"),
+                    archivedForRecovery = doc.getBoolean("archivedForRecovery") ?: false,
+                    visibility = doc.getString("visibility") ?: "VISIBLE",
+                    cloudinarySecureUrl = doc.getString("cloudinarySecureUrl"),
+                    cloudinaryPublicId = doc.getString("cloudinaryPublicId"),
+                    createdAtEpochMs = doc.getLong("createdAtEpochMs") ?: 0L,
+                    updatedAtEpochMs = doc.getLong("updatedAtEpochMs") ?: 0L
+                )
+            }
+            Result.success(list)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun incrementRecoveryRuns(uid: String): Result<Int> = withContext(Dispatchers.IO) {
+        if (uid.isBlank()) return@withContext Result.failure(IllegalArgumentException("UID cannot be empty"))
+        try {
+            val userRef = firestore.collection(COLLECTION_USERS).document(uid)
+            val snap = userRef.get().await()
+            val currentRuns = snap.getLong("recoveryRunsUsed")?.toInt() ?: 0
+            val newRuns = currentRuns + 1
+            userRef.set(mapOf("recoveryRunsUsed" to newRuns), SetOptions.merge()).await()
+            Result.success(newRuns)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

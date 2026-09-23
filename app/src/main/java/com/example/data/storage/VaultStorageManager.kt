@@ -52,7 +52,7 @@ data class GalleryExportSummary(
 )
 
 class VaultStorageManager(
-    private val context: Context,
+    val context: Context,
     private val fileEncryptor: VaultFileEncryptor = VaultFileEncryptor()
 ) {
 

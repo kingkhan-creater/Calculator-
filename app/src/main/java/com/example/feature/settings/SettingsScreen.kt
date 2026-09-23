@@ -3,11 +3,13 @@ package com.example.feature.settings
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,10 +37,12 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.Password
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Tune
@@ -50,6 +54,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -67,6 +72,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -75,18 +81,14 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.example.core.admin.AdminConstants
 import com.example.feature.recording.RecordingForegroundService
 import com.example.feature.recording.VolumeButtonRecordingManager
 import com.example.feature.recording.VolumeKeyAction
-
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Password
-import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
-import android.widget.Toast
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -328,7 +330,7 @@ fun SettingsScreen(
             },
             title = {
                 Text(
-                    text = "Closed App Recording Setup",
+                    text = "Background Recording Setup",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -339,7 +341,7 @@ fun SettingsScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "App close hone ke baad bhi volume buttons se recording kaam kare, uske liye phone mein ye 3 settings enable karein:",
+                        text = "To allow volume buttons to trigger recording when the app is closed or the screen is off, configure these 3 phone settings:",
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary
@@ -348,25 +350,27 @@ fun SettingsScreen(
                     Card(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        )
+                        ),
+                        shape = RoundedCornerShape(12.dp)
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(
-                                text = "1. Accessibility Service (Zaroori)",
+                                text = "1. Accessibility Service (Required)",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "• Niche 'Open Accessibility Settings' dabayein.\n• 'Installed apps' ya 'Downloaded services' mein ja kar 'Stealth Volume Recording' ON karein.",
+                                text = "• Tap 'Open Accessibility Settings' below.\n• Look for 'Installed apps' or 'Downloaded services'.\n• Turn ON 'Stealth Volume Recording'.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             OutlinedButton(
                                 onClick = { VolumeButtonRecordingManager.openAccessibilitySettings(context) },
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp)
                             ) {
                                 Text("Open Accessibility Settings")
                             }
@@ -376,25 +380,27 @@ fun SettingsScreen(
                     Card(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        )
+                        ),
+                        shape = RoundedCornerShape(12.dp)
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(
-                                text = "2. Battery Optimization (Don't optimize)",
+                                text = "2. Battery Optimization (Unrestricted)",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "• Niche 'Open Battery Settings' dabayein.\n• Calculator Vault ki battery 'Unrestricted' ya 'Don't optimize' par set karein taakay Android background service ko kill na kare.\n• Xiaomi/Vivo/Oppo: 'Autostart' ko bhi Allow karein.",
+                                text = "• Tap 'Open Battery Settings' below.\n• Set Calculator Vault to 'Unrestricted' or 'Don't Optimize' so Android does not stop the background service.\n• Xiaomi/Vivo/Oppo: Also allow 'Autostart'.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             OutlinedButton(
                                 onClick = { VolumeButtonRecordingManager.openBatteryOptimizationSettings(context) },
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp)
                             ) {
                                 Text("Open Battery Settings")
                             }
@@ -404,7 +410,8 @@ fun SettingsScreen(
                     Card(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                        )
+                        ),
+                        shape = RoundedCornerShape(12.dp)
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(
@@ -415,14 +422,15 @@ fun SettingsScreen(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "• Camera aur Microphone permissions allow honi chahiye taakay bina kisi pop-up ke stealth video record ho saky.",
+                                text = "• Ensure Camera and Microphone permissions are allowed at all times so video recording can start without showing permission dialogs.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             OutlinedButton(
                                 onClick = { VolumeButtonRecordingManager.openAppDetailsSettings(context) },
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp)
                             ) {
                                 Text("Open App Permissions")
                             }
@@ -432,18 +440,19 @@ fun SettingsScreen(
                     Card(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)
-                        )
+                        ),
+                        shape = RoundedCornerShape(12.dp)
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(
-                                text = "★ Pro Tip (Lock in Recent Tasks):",
+                                text = "★ Pro Tip (Lock in Recent Apps):",
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Phone ki Recent Apps (multitasking screen) kholein aur Calculator Vault app ko swipe down ya lock icon daba kar Lock kar dein taakay phone cleaner isay close na kare.",
+                                text = "Open your phone's Recent Apps (multitasking screen), find Calculator Vault, and tap the Lock icon or swipe down to keep it in memory.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -453,7 +462,7 @@ fun SettingsScreen(
             },
             confirmButton = {
                 Button(onClick = { showSetupGuideDialog = false }) {
-                    Text("Got It (Theek Hai)")
+                    Text("Got It")
                 }
             }
         )
@@ -473,11 +482,11 @@ fun SettingsScreen(
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(24.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             text = "Vault Settings",
                             style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 },
@@ -503,110 +512,263 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 1. Quick Recording & Persistent Notification
-            SettingsSectionHeader(title = "Recording & Notifications")
-            SettingsToggleCard(
-                icon = Icons.Default.NotificationsActive,
-                title = "Persistent Quick Recording Bar",
-                subtitle = "Keep a permanent recording notification on your phone to start, pause, and stop recordings anytime without opening the app",
-                checked = isPersistentNotificationEnabled,
-                onCheckedChange = { isEnabled ->
-                    isPersistentNotificationEnabled = isEnabled
-                    sharedPrefs.edit().putBoolean("persistent_recording_notification", isEnabled).apply()
-                    val serviceIntent = Intent(context, RecordingForegroundService::class.java).apply {
-                        action = if (isEnabled) RecordingForegroundService.ACTION_START_STANDBY else RecordingForegroundService.ACTION_STOP_STANDBY
-                    }
-                    if (isEnabled) {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            context.startForegroundService(serviceIntent)
-                        } else {
-                            context.startService(serviceIntent)
-                        }
-                    } else {
-                        context.startService(serviceIntent)
-                    }
-                },
-                testTag = "settings_toggle_persistent_notification"
-            )
-
-            // Hardware Volume Button Recording Controls
-            SettingsSectionHeader(title = "Hardware Volume Button Controls")
-            SettingsToggleCard(
-                icon = Icons.Default.Tune,
-                title = "Volume Buttons Recording Shortcuts",
-                subtitle = "Control video recording discreetly using phone hardware volume keys without touching the screen",
-                checked = isVolumeControlsEnabled,
-                onCheckedChange = { isEnabled ->
-                    isVolumeControlsEnabled = isEnabled
-                    VolumeButtonRecordingManager.setEnabled(context, isEnabled)
-                },
-                testTag = "settings_toggle_volume_controls"
-            )
-
-            if (isVolumeControlsEnabled) {
+            // ==========================================
+            // 1. ACCOUNT
+            // ==========================================
+            SettingsSectionHeader(title = "Account")
+            SettingsGroupCard {
                 SettingsCard(
-                    icon = Icons.Default.VolumeUp,
-                    title = "Volume UP Button",
-                    subtitle = "${volumeUpAction.title} (${volumeUpAction.description})",
-                    onClick = { showVolumeUpDialog = true },
-                    testTag = "settings_volume_up_action"
+                    icon = Icons.Default.Person,
+                    title = "Account & Cloud Sync",
+                    subtitle = if (!currentUserEmail.isNullOrBlank()) currentUserEmail else "Sign in with Google to protect and sync your cloud vault",
+                    testTag = "settings_item_account",
+                    onClick = onNavigateToAuth,
+                    trailingBadge = if (!currentUserEmail.isNullOrBlank()) "Signed In" else null
+                )
+            }
+
+            // ==========================================
+            // 2. SECURITY
+            // ==========================================
+            SettingsSectionHeader(title = "Security")
+            SettingsGroupCard {
+                SettingsCard(
+                    icon = Icons.Default.Key,
+                    title = "Change Vault PIN",
+                    subtitle = "Update your secret calculator unlock code",
+                    testTag = "settings_item_change_pin",
+                    onClick = onChangePinRequested
                 )
 
-                SettingsCard(
-                    icon = Icons.Default.VolumeDown,
-                    title = "Volume DOWN Button",
-                    subtitle = "${volumeDownAction.title} (${volumeDownAction.description})",
-                    onClick = { showVolumeDownDialog = true },
-                    testTag = "settings_volume_down_action"
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                    modifier = Modifier.padding(horizontal = 16.dp)
                 )
 
                 SettingsToggleCard(
-                    icon = Icons.Default.NotificationsOff,
-                    title = "Dismiss Notification on Volume Stop",
-                    subtitle = "When stopped using volume buttons, immediately clear and dismiss the recording notification (video remains safely encrypted in Vault)",
-                    checked = isDismissNotificationOnVolumeStop,
-                    onCheckedChange = { isDismiss ->
-                        isDismissNotificationOnVolumeStop = isDismiss
-                        VolumeButtonRecordingManager.setDismissNotificationOnVolumeStop(context, isDismiss)
+                    icon = Icons.Default.Shield,
+                    title = "Decoy Panic PIN",
+                    subtitle = if (isPanicPinEnabled)
+                        "Active • Entering Panic PIN opens an empty decoy vault"
+                    else
+                        "Disabled • Configure a secret PIN to show an empty decoy vault under duress",
+                    checked = isPanicPinEnabled,
+                    onCheckedChange = { isChecked ->
+                        if (isChecked && !isPanicPinConfigured) {
+                            showPanicPinDialog = true
+                        } else {
+                            isPanicPinEnabled = isChecked
+                            securityRepository?.setPanicPinEnabled(isChecked)
+                        }
                     },
-                    testTag = "settings_toggle_volume_stop_notification"
+                    testTag = "settings_toggle_panic_pin"
                 )
 
+                if (isPanicPinEnabled || isPanicPinConfigured) {
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+
+                    SettingsCard(
+                        icon = Icons.Default.Password,
+                        title = if (isPanicPinConfigured) "Change Decoy PIN Code" else "Set Decoy PIN Code",
+                        subtitle = "Configure the secret PIN that opens an empty decoy vault",
+                        testTag = "settings_item_configure_panic_pin",
+                        onClick = { showPanicPinDialog = true }
+                    )
+                }
+
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+
+                SettingsCard(
+                    icon = Icons.Default.Lock,
+                    title = "Screenshot Protection",
+                    subtitle = "Prevents screenshots and app switcher previews of private vault files",
+                    testTag = "settings_item_security",
+                    onClick = {},
+                    trailingBadge = "Protected"
+                )
+
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+
+                SettingsCard(
+                    icon = Icons.Default.Security,
+                    title = "Private Encrypted Storage",
+                    subtitle = "All media files are safely encrypted locally and hidden from your phone gallery",
+                    testTag = "settings_item_app_info",
+                    onClick = {},
+                    trailingBadge = "AES-256"
+                )
+            }
+
+            // ==========================================
+            // 3. RECORDING
+            // ==========================================
+            SettingsSectionHeader(title = "Recording")
+            SettingsGroupCard {
+                SettingsToggleCard(
+                    icon = Icons.Default.NotificationsActive,
+                    title = "Quick Record Notification",
+                    subtitle = "Control recording directly from the notification bar without opening the app",
+                    checked = isPersistentNotificationEnabled,
+                    onCheckedChange = { isEnabled ->
+                        isPersistentNotificationEnabled = isEnabled
+                        sharedPrefs.edit().putBoolean("persistent_recording_notification", isEnabled).apply()
+                        val serviceIntent = Intent(context, RecordingForegroundService::class.java).apply {
+                            action = if (isEnabled) RecordingForegroundService.ACTION_START_STANDBY else RecordingForegroundService.ACTION_STOP_STANDBY
+                        }
+                        if (isEnabled) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                context.startForegroundService(serviceIntent)
+                            } else {
+                                context.startService(serviceIntent)
+                            }
+                        } else {
+                            context.startService(serviceIntent)
+                        }
+                    },
+                    testTag = "settings_toggle_persistent_notification"
+                )
+
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+
+                SettingsToggleCard(
+                    icon = Icons.Default.Tune,
+                    title = "Volume Button Recording",
+                    subtitle = "Press phone hardware volume buttons to secretly start or stop video recording",
+                    checked = isVolumeControlsEnabled,
+                    onCheckedChange = { isEnabled ->
+                        isVolumeControlsEnabled = isEnabled
+                        VolumeButtonRecordingManager.setEnabled(context, isEnabled)
+                    },
+                    testTag = "settings_toggle_volume_controls"
+                )
+
+                if (isVolumeControlsEnabled) {
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+
+                    SettingsCard(
+                        icon = Icons.Default.VolumeUp,
+                        title = "Volume UP Button",
+                        subtitle = "${volumeUpAction.title} • ${volumeUpAction.description}",
+                        onClick = { showVolumeUpDialog = true },
+                        testTag = "settings_volume_up_action"
+                    )
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+
+                    SettingsCard(
+                        icon = Icons.Default.VolumeDown,
+                        title = "Volume DOWN Button",
+                        subtitle = "${volumeDownAction.title} • ${volumeDownAction.description}",
+                        onClick = { showVolumeDownDialog = true },
+                        testTag = "settings_volume_down_action"
+                    )
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+
+                    SettingsToggleCard(
+                        icon = Icons.Default.NotificationsOff,
+                        title = "Hide Notification on Stop",
+                        subtitle = "Immediately dismiss the recording notification when stopped using volume buttons",
+                        checked = isDismissNotificationOnVolumeStop,
+                        onCheckedChange = { isDismiss ->
+                            isDismissNotificationOnVolumeStop = isDismiss
+                            VolumeButtonRecordingManager.setDismissNotificationOnVolumeStop(context, isDismiss)
+                        },
+                        testTag = "settings_toggle_volume_stop_notification"
+                    )
+
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+
+                    SettingsToggleCard(
+                        icon = Icons.Default.FlashlightOn,
+                        title = "Floating Torch Shortcut",
+                        subtitle = "Display a floating torch icon on screen that works as a real flashlight for disguise",
+                        checked = isFloatingFlashlightEnabled,
+                        onCheckedChange = { isEnabled ->
+                            isFloatingFlashlightEnabled = isEnabled
+                            com.example.feature.recording.FlashlightFloatingOverlayManager.setFloatingButtonEnabled(context, isEnabled)
+                        },
+                        testTag = "settings_toggle_floating_flashlight"
+                    )
+                }
+            }
+
+            // Sub-cards for Recording Status if volume controls enabled
+            if (isVolumeControlsEnabled) {
+                // Background Service Status Card
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
                         containerColor = if (isAccessibilityEnabled) {
-                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
                         } else {
-                            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)
+                            MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
                         }
-                    )
+                    ),
+                    shape = RoundedCornerShape(16.dp)
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = if (isAccessibilityEnabled) Icons.Default.CheckCircle else Icons.Default.Info,
                                 contentDescription = null,
-                                tint = if (isAccessibilityEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
+                                tint = if (isAccessibilityEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (isAccessibilityEnabled) "Background Service Active (Ready)" else "Closed App Recording Setup",
+                                text = if (isAccessibilityEnabled) "Background Service: Ready" else "Background Service: Setup Needed",
                                 style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
+                                fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
+                            Spacer(modifier = Modifier.weight(1f))
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isAccessibilityEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
+                            ) {
+                                Text(
+                                    text = if (isAccessibilityEnabled) "Ready" else "Action Needed",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isAccessibilityEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                )
+                            }
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = if (isAccessibilityEnabled) {
-                                "✓ Volume buttons will trigger recording even when this app is completely closed or running in the background."
+                                "✓ Volume buttons can trigger recording even when the app is closed or the screen is off."
                             } else {
-                                "App close hone ke baad bhi volume buttons se recording ke liye phone ki Accessibility aur Battery Optimization settings enable karein."
+                                "To allow volume buttons to trigger recording while the app is closed, enable the Accessibility Service."
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -619,7 +781,8 @@ fun SettingsScreen(
                         ) {
                             OutlinedButton(
                                 onClick = { showSetupGuideDialog = true },
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(10.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.HelpOutline,
@@ -632,7 +795,8 @@ fun SettingsScreen(
                             if (!isAccessibilityEnabled) {
                                 Button(
                                     onClick = { VolumeButtonRecordingManager.openAccessibilitySettings(context) },
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.OpenInNew,
@@ -640,57 +804,21 @@ fun SettingsScreen(
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Turn ON", style = MaterialTheme.typography.labelMedium)
+                                    Text("Open Settings", style = MaterialTheme.typography.labelMedium)
                                 }
                             }
                         }
                     }
                 }
 
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Default Behavior: Press Volume Up to Start recording (or Pause/Resume when recording). Press Volume Down to Stop and save directly to Vault. You can customize each button above.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                // 2. Flashlight Floating Camouflage Button
-                SettingsToggleCard(
-                    icon = Icons.Default.FlashlightOn,
-                    title = "Flashlight Camouflage Floating Icon",
-                    subtitle = "Show a floating flashlight icon on screen. Tapping turns real flashlight ON/OFF. Long-pressing Volume DOWN instantly removes it and locks controls until Vault is opened",
-                    checked = isFloatingFlashlightEnabled,
-                    onCheckedChange = { isEnabled ->
-                        isFloatingFlashlightEnabled = isEnabled
-                        com.example.feature.recording.FlashlightFloatingOverlayManager.setFloatingButtonEnabled(context, isEnabled)
-                    },
-                    testTag = "settings_toggle_floating_flashlight"
-                )
-
+                // Locked Controls or Floating Flashlight Active Banner
                 if (isControlsLocked) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.7f)
-                        )
+                        ),
+                        shape = RoundedCornerShape(16.dp)
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -710,7 +838,7 @@ fun SettingsScreen(
                             }
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "Volume DOWN was long-pressed. The flashlight icon has been removed from screen and recording buttons are locked for security.\n\nEnter your Master PIN in Calculator to unlock the Vault and automatically restore everything.",
+                                text = "Volume DOWN was long-pressed. The flashlight icon has been removed from screen and recording buttons are locked for security.\n\nEnter your Master PIN in Calculator to unlock the Vault and restore controls.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )
@@ -720,9 +848,10 @@ fun SettingsScreen(
                                     com.example.feature.recording.VolumeButtonRecordingManager.onVaultUnlocked(context)
                                     isControlsLocked = false
                                 },
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
                             ) {
-                                Text("Restore Controls & Flashlight Now")
+                                Text("Restore Controls Now")
                             }
                         }
                     }
@@ -730,8 +859,9 @@ fun SettingsScreen(
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                        )
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ),
+                        shape = RoundedCornerShape(16.dp)
                     ) {
                         Column(modifier = Modifier.padding(14.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -743,7 +873,7 @@ fun SettingsScreen(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Flashlight Camouflage Active",
+                                    text = "Torch Camouflage Active",
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -751,7 +881,7 @@ fun SettingsScreen(
                             }
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "• Touch icon: Toggles phone Flashlight ON/OFF (acts as a genuine torch).\n• Long-press Volume DOWN: Instantly removes icon and locks controls.\n• Restore controls: Open Vault with your Master PIN.",
+                                text = "• Tap icon: Toggles phone Flashlight ON/OFF (acts as a real torch).\n• Long-press Volume DOWN: Instantly removes icon and locks controls.\n• Restore controls: Open Vault with your Master PIN.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -760,131 +890,94 @@ fun SettingsScreen(
                                 onClick = {
                                     com.example.feature.recording.FlashlightFloatingOverlayManager.show(context)
                                 },
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
                             ) {
-                                Text("Show / Position Flashlight Button")
+                                Text("Show / Position Torch Button")
                             }
                         }
                     }
                 }
             }
 
-            // 2. Video Playback
-            SettingsSectionHeader(title = "Video Playback")
-            SettingsToggleCard(
-                icon = Icons.Default.PlayCircle,
-                title = "Direct External Video Player",
-                subtitle = "Open videos directly in VLC / MX Player instead of built-in hardware player",
-                checked = isExternalPlayerPreferred,
-                onCheckedChange = { isEnabled ->
-                    isExternalPlayerPreferred = isEnabled
-                    sharedPrefs.edit().putBoolean("use_external_video_player", isEnabled).apply()
-                },
-                testTag = "settings_toggle_external_player"
-            )
-
-            // 3. Account Section
-            SettingsSectionHeader(title = "Account & Cloud Backup")
-            SettingsCard(
-                icon = Icons.Default.Person,
-                title = "Account & Cloud Sync",
-                subtitle = "Optional Firebase login for secure Cloudinary cloud backup",
-                testTag = "settings_item_account",
-                onClick = onNavigateToAuth
-            )
-            SettingsCard(
-                icon = Icons.Default.CloudSync,
-                title = "Cloud Backup & Restore",
-                subtitle = "Manually backup and restore encrypted vault media via Cloudinary",
-                testTag = "settings_item_cloud_backup",
-                onClick = onNavigateToCloudBackup
-            )
-
-            // 4. Premium Section
-            SettingsSectionHeader(title = "Premium Subscription")
-            SettingsCard(
-                icon = Icons.Default.Star,
-                title = if (isPremium) "Premium Active" else "Upgrade to Premium",
-                subtitle = if (isPremium) "Your subscription is active with full cloud backup & restore privileges" else "Cloud backup, cross-device sync, 4K video storage & zero ads",
-                testTag = "settings_item_premium",
-                onClick = onNavigateToPremium
-            )
-
-            // 5. Administration Section (Exclusively visible to king.khan648k@gmail.com)
-            if (AdminConstants.isAdminEmail(currentUserEmail)) {
-                SettingsSectionHeader(title = "System Administration")
+            // ==========================================
+            // 4. BACKUP & CLOUD
+            // ==========================================
+            SettingsSectionHeader(title = "Backup & Cloud")
+            SettingsGroupCard {
                 SettingsCard(
-                    icon = Icons.Default.AdminPanelSettings,
-                    title = "Admin Console (${AdminConstants.ADMIN_EMAIL})",
-                    subtitle = "Master dashboard for updates, broadcasts, user files & membership privileges",
-                    testTag = "settings_item_admin",
-                    onClick = onNavigateToAdmin
+                    icon = Icons.Default.CloudSync,
+                    title = "Cloud Backup & Restore",
+                    subtitle = "Safely backup or restore your encrypted vault photos and videos",
+                    testTag = "settings_item_cloud_backup",
+                    onClick = onNavigateToCloudBackup
+                )
+
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+
+                SettingsCard(
+                    icon = Icons.Default.Star,
+                    title = if (isPremium) "Premium Membership" else "Upgrade to Premium",
+                    subtitle = if (isPremium) "Active • Full cloud backup and 15-day recovery privileges unlocked" else "Unlock automatic cloud backup, cross-device sync & 15-day recovery",
+                    testTag = "settings_item_premium",
+                    onClick = onNavigateToPremium,
+                    trailingBadge = if (isPremium) "VIP Active" else "Upgrade"
                 )
             }
 
-            // 6. Version & Updates Section
-            SettingsSectionHeader(title = "App Updates & Information")
-            SettingsCard(
-                icon = Icons.Default.SystemUpdate,
-                title = "Check for App Updates",
-                subtitle = "Installed: v${com.example.BuildConfig.VERSION_NAME} (Build ${com.example.BuildConfig.VERSION_CODE}) • Tap to verify live releases",
-                testTag = "settings_item_check_updates",
-                onClick = onCheckUpdateClick
-            )
-
-            // 7. Security Section
-            SettingsSectionHeader(title = "Security & Double PIN (Panic Mode)")
-            SettingsCard(
-                icon = Icons.Default.Key,
-                title = "Change Vault Master PIN",
-                subtitle = "Update your 4-digit secret calculator unlock code",
-                testTag = "settings_item_change_pin",
-                onClick = onChangePinRequested
-            )
-
-            SettingsToggleCard(
-                icon = Icons.Default.Shield,
-                title = "Panic / Decoy PIN (Double PIN)",
-                subtitle = if (isPanicPinEnabled) 
-                    "Enabled • Entering Panic PIN opens a completely empty decoy vault"
-                else 
-                    "Disabled • Tap to enable duress decoy mode",
-                checked = isPanicPinEnabled,
-                onCheckedChange = { isChecked ->
-                    if (isChecked && !isPanicPinConfigured) {
-                        showPanicPinDialog = true
-                    } else {
-                        isPanicPinEnabled = isChecked
-                        securityRepository?.setPanicPinEnabled(isChecked)
-                    }
-                },
-                testTag = "settings_toggle_panic_pin"
-            )
-
-            if (isPanicPinEnabled || isPanicPinConfigured) {
-                SettingsCard(
-                    icon = Icons.Default.Password,
-                    title = if (isPanicPinConfigured) "Change Panic PIN Code" else "Set Panic PIN Code",
-                    subtitle = "Configure the secret PIN that unlocks an empty decoy vault safely",
-                    testTag = "settings_item_configure_panic_pin",
-                    onClick = { showPanicPinDialog = true }
+            // ==========================================
+            // 5. PLAYBACK
+            // ==========================================
+            SettingsSectionHeader(title = "Playback")
+            SettingsGroupCard {
+                SettingsToggleCard(
+                    icon = Icons.Default.PlayCircle,
+                    title = "External Video Player",
+                    subtitle = "Play videos using external apps like VLC or MX Player instead of built-in player",
+                    checked = isExternalPlayerPreferred,
+                    onCheckedChange = { isEnabled ->
+                        isExternalPlayerPreferred = isEnabled
+                        sharedPrefs.edit().putBoolean("use_external_video_player", isEnabled).apply()
+                    },
+                    testTag = "settings_toggle_external_player"
                 )
             }
 
-            SettingsCard(
-                icon = Icons.Default.Lock,
-                title = "Auto-Lock & FLAG_SECURE",
-                subtitle = "Active: Prevents app screenshots & locks on exit",
-                testTag = "settings_item_security",
-                onClick = {}
-            )
-            SettingsCard(
-                icon = Icons.Default.Security,
-                title = "Local AES-256 Storage",
-                subtitle = "Local Room database with private AES-GCM media encryption (hidden from Gallery)",
-                testTag = "settings_item_app_info",
-                onClick = {}
-            )
+            // ==========================================
+            // 6. APP & INFORMATION
+            // ==========================================
+            SettingsSectionHeader(title = "App & Information")
+            SettingsGroupCard {
+                SettingsCard(
+                    icon = Icons.Default.SystemUpdate,
+                    title = "Check for Updates",
+                    subtitle = "Version ${com.example.BuildConfig.VERSION_NAME} (Build ${com.example.BuildConfig.VERSION_CODE}) • Tap to verify live releases",
+                    testTag = "settings_item_check_updates",
+                    onClick = onCheckUpdateClick,
+                    trailingBadge = "v${com.example.BuildConfig.VERSION_NAME}"
+                )
+
+                if (AdminConstants.isAdminEmail(currentUserEmail)) {
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+
+                    SettingsCard(
+                        icon = Icons.Default.AdminPanelSettings,
+                        title = "Admin Console",
+                        subtitle = "Master dashboard for user management, updates, broadcasts and privileges",
+                        testTag = "settings_item_admin",
+                        onClick = onNavigateToAdmin,
+                        trailingBadge = "Admin"
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
@@ -892,12 +985,32 @@ fun SettingsScreen(
 @Composable
 private fun SettingsSectionHeader(title: String) {
     Text(
-        text = title,
-        style = MaterialTheme.typography.titleSmall,
+        text = title.uppercase(),
+        style = MaterialTheme.typography.labelMedium,
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 2.dp)
+        letterSpacing = 0.8.sp,
+        modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 4.dp)
     )
+}
+
+@Composable
+private fun SettingsGroupCard(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+        ),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            content = content
+        )
+    }
 }
 
 @Composable
@@ -909,60 +1022,54 @@ private fun SettingsToggleCard(
     onCheckedChange: (Boolean) -> Unit,
     testTag: String
 ) {
-    Card(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .testTag(testTag),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        ),
-        shape = RoundedCornerShape(16.dp)
+            .testTag(testTag)
+            .clickable { onCheckedChange(!checked) }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = if (checked) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.7f),
+            modifier = Modifier.size(40.dp)
         ) {
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.size(40.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
                 )
             }
+        }
 
-            Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(14.dp))
 
-            Switch(
-                checked = checked,
-                onCheckedChange = onCheckedChange,
-                modifier = Modifier.testTag("${testTag}_switch")
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 16.sp
             )
         }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            modifier = Modifier.testTag("${testTag}_switch")
+        )
     }
 }
 
@@ -972,62 +1079,73 @@ private fun SettingsCard(
     title: String,
     subtitle: String,
     testTag: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    trailingBadge: String? = null
 ) {
-    Card(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .testTag(testTag)
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        ),
-        shape = RoundedCornerShape(16.dp)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+            modifier = Modifier.size(40.dp)
         ) {
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                modifier = Modifier.size(40.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
                 )
             }
+        }
 
-            Spacer(modifier = Modifier.width(8.dp))
+        Spacer(modifier = Modifier.width(14.dp))
 
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 16.sp
             )
         }
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        if (trailingBadge != null) {
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                modifier = Modifier.padding(end = 4.dp)
+            ) {
+                Text(
+                    text = trailingBadge,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+            }
+        }
+
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            modifier = Modifier.size(20.dp)
+        )
     }
 }

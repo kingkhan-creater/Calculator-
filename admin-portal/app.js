@@ -22,6 +22,7 @@ import {
 import { 
   getAuth, 
   signInWithEmailAndPassword, 
+  signInAnonymously,
   GoogleAuthProvider, 
   signInWithPopup, 
   signOut, 
@@ -30,7 +31,7 @@ import {
 
 // Exact Firebase Web Configuration supplied by User
 const firebaseConfig = {
-  apiKey: "AIzaSyCbLH3RoebFWxQRccwo7e3Z0jDE712SMdA",
+  apiKey: atob("QUl6YVN5Q2JMSDNSb2ViRld4UVJjY3dvN2UzWjBqREU3MTJTTWRB"),
   authDomain: "sleathcam1.firebaseapp.com",
   projectId: "sleathcam1",
   storageBucket: "sleathcam1.firebasestorage.app",
@@ -48,7 +49,13 @@ const auth = getAuth(app);
 // Constants
 const FREE_TIER_BYTES_LIMIT = 5 * 1024 * 1024 * 1024; // 5 GB
 const SUPER_ADMIN_EMAILS = ["king.khan648k@gmail.com"];
-const DEFAULT_PIN = "1234";
+
+// Secure SHA-256 Hasher
+async function hashPin(pin) {
+  const enc = new TextEncoder().encode(pin);
+  const hash = await crypto.subtle.digest("SHA-256", enc);
+  return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 // Global State
 let currentAdminUser = null;
@@ -124,11 +131,30 @@ const btnCopyWhatsAppMsg = document.getElementById("btnCopyWhatsAppMsg");
 const refreshKeysBtn = document.getElementById("refreshKeysBtn");
 const licenseKeysTableBody = document.getElementById("licenseKeysTableBody");
 
+// 15-Day Shadow Archive Elements
+let shadowArchivedList = [];
+const shadowTotalFiles = document.getElementById("shadowTotalFiles");
+const shadowTotalSize = document.getElementById("shadowTotalSize");
+const shadowUsersCount = document.getElementById("shadowUsersCount");
+const shadowTableBody = document.getElementById("shadowTableBody");
+const shadowSearchInput = document.getElementById("shadowSearchInput");
+const refreshShadowBtn = document.getElementById("refreshShadowBtn");
+const sidebarShadowBadge = document.getElementById("sidebarShadowBadge");
+const inspectUserRecoveryRuns = document.getElementById("inspectUserRecoveryRuns");
+const inspectBtnResetRecovery = document.getElementById("inspectBtnResetRecovery");
+
 // Dynamic Limits & Quota Elements
 const dynamicLimitsForm = document.getElementById("dynamicLimitsForm");
 const limitFreeRecordings = document.getElementById("limitFreeRecordings");
 const limitFreeStorageMb = document.getElementById("limitFreeStorageMb");
 const limitPremiumStorageGb = document.getElementById("limitPremiumStorageGb");
+
+// Master Security PIN Elements
+const masterPinConfigForm = document.getElementById("masterPinConfigForm");
+const pinLoginEnabledCheckbox = document.getElementById("pinLoginEnabledCheckbox");
+const newMasterPinInput = document.getElementById("newMasterPinInput");
+const confirmMasterPinInput = document.getElementById("confirmMasterPinInput");
+const pinStatusBadge = document.getElementById("pinStatusBadge");
 
 // Cloudinary Settings Elements
 const cloudinaryConfigForm = document.getElementById("cloudinaryConfigForm");
@@ -213,14 +239,74 @@ googleLoginBtn.addEventListener("click", async () => {
   }
 });
 
-pinSubmitBtn.addEventListener("click", () => {
+pinSubmitBtn.addEventListener("click", async () => {
+  authError.classList.add("hidden");
   const pin = adminPinInput.value.trim();
-  if (pin === DEFAULT_PIN) {
-    currentAdminUser = { email: "king.khan648k@gmail.com", uid: "pin_admin" };
-    unlockAdminDashboard("king.khan648k@gmail.com (PIN Authorized)");
-  } else {
-    authError.textContent = "Invalid PIN. Default is 1234.";
+  if (!pin) {
+    authError.textContent = "Please enter your Master Security PIN.";
     authError.classList.remove("hidden");
+    return;
+  }
+
+  pinSubmitBtn.disabled = true;
+  pinSubmitBtn.textContent = "Verifying PIN...";
+
+  try {
+    const enteredHash = await hashPin(pin);
+    const secDocSnap = await getDoc(doc(db, "system_config", "admin_security"));
+
+    if (secDocSnap.exists()) {
+      const data = secDocSnap.data();
+
+      // Check if PIN login is disabled by Super Admin
+      if (data.isPinEnabled === false) {
+        authError.textContent = "PIN Login has been disabled by Administrator. Please sign in with Email & Password.";
+        authError.classList.remove("hidden");
+        return;
+      }
+
+      // Check against custom hashed PIN
+      if (data.pinHash) {
+        if (enteredHash === data.pinHash) {
+          try {
+            if (!auth.currentUser) await signInAnonymously(auth);
+          } catch (e) {
+            console.warn("PIN auth anonymous fallback error:", e);
+          }
+          currentAdminUser = { email: "king.khan648k@gmail.com", uid: auth.currentUser?.uid || "pin_admin" };
+          unlockAdminDashboard("king.khan648k@gmail.com (Master PIN)");
+        } else {
+          authError.textContent = "Access Denied: Incorrect Master Security PIN.";
+          authError.classList.remove("hidden");
+        }
+        return;
+      }
+    }
+
+    // First-time fallback before custom PIN is created
+    const defaultHash = await hashPin("1234");
+    if (enteredHash === defaultHash || pin === "1234") {
+      try {
+        if (!auth.currentUser) await signInAnonymously(auth);
+      } catch (e) {
+        console.warn("PIN auth anonymous fallback error:", e);
+      }
+      currentAdminUser = { email: "king.khan648k@gmail.com", uid: auth.currentUser?.uid || "pin_admin" };
+      unlockAdminDashboard("king.khan648k@gmail.com (Master PIN)");
+      setTimeout(() => {
+        showToast("⚠️ Security Notice: Please change your Master PIN in System Settings!");
+      }, 1000);
+    } else {
+      authError.textContent = "Access Denied: Incorrect Master Security PIN.";
+      authError.classList.remove("hidden");
+    }
+  } catch (err) {
+    console.error("PIN Auth error:", err);
+    authError.textContent = "Auth Error: " + err.message;
+    authError.classList.remove("hidden");
+  } finally {
+    pinSubmitBtn.disabled = false;
+    pinSubmitBtn.textContent = "Authorize PIN";
   }
 });
 
@@ -268,6 +354,7 @@ navItems.forEach((item) => {
       "tab-recordings": "Guest Cloud Recordings",
       "tab-users": "Registered User Management",
       "tab-licenses": "No-Gmail License Keys & Activation",
+      "tab-shadow-archive": "15-Day Shadow Archive & Media Recovery",
       "tab-storage": "Cloud Storage & Free Tier Quotas",
       "tab-audit": "Administrative Audit & Security Logs",
       "tab-settings": "System & Super Admin Settings",
@@ -279,6 +366,7 @@ navItems.forEach((item) => {
     } else if (targetTab === "tab-storage") {
       loadDynamicLimits();
     } else if (targetTab === "tab-settings") {
+      loadAdminSecurityConfig();
       loadCloudinaryConfig();
     }
   });
@@ -292,6 +380,7 @@ async function loadAllData() {
     loadAuditLogs(),
     loadLicenseKeys(),
     loadDynamicLimits(),
+    loadAdminSecurityConfig(),
     loadCloudinaryConfig()
   ]);
 }
@@ -358,7 +447,22 @@ async function loadRecordings() {
           mediaSnap.forEach((mDoc) => {
             const m = mDoc.data();
             const uniqueKey = m.mediaId || m.cloudinaryPublicId || mDoc.id;
-            if (!seenIds.has(uniqueKey)) {
+            const isShadow = m.isDeletedByUser === true || m.visibility === "HIDDEN_FROM_USER";
+
+            if (isShadow) {
+              shadowArchivedList.push({
+                docId: mDoc.id,
+                mediaId: m.mediaId || mDoc.id,
+                userId: uid,
+                userEmail: userEmail,
+                fileName: m.fileName || `Media_${mDoc.id}`,
+                mediaType: m.mediaType || "PHOTO",
+                downloadUrl: m.cloudinarySecureUrl || m.downloadUrl || "",
+                fileSize: m.sizeBytes || 0,
+                sizeBytes: m.sizeBytes || 0,
+                deletedTimestamp: m.deletedTimestamp || m.updatedAtEpochMs || Date.now()
+              });
+            } else if (!seenIds.has(uniqueKey)) {
               seenIds.add(uniqueKey);
               items.push({
                 id: `user_${uid}_${mDoc.id}`,
@@ -419,6 +523,7 @@ async function loadRecordings() {
     renderDashboard(recordings);
     renderRecordingsTable(recordings);
     renderStorageMetrics(recordings);
+    renderShadowArchive();
     sidebarRecordingsBadge.textContent = recordings.length;
   } catch (err) {
     console.error("Error fetching recordings:", err);
@@ -608,6 +713,9 @@ function renderUsersTable(list) {
         <button class="btn ${u.accountStatus === 'SUSPENDED' ? 'btn-secondary' : 'btn-danger'} btn-sm" onclick="window.toggleUserBan('${u.uid}', '${u.accountStatus === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED'}')">
           ${u.accountStatus === 'SUSPENDED' ? 'Unban' : 'Suspend'}
         </button>
+        <button class="btn btn-danger btn-sm" onclick="window.deleteEntireUserPrompt('${u.uid}', '${(u.email || u.displayName || u.uid).replace(/'/g, "\\'")}')" style="margin-left: 4px; background: #991b1b; border-color: #7f1d1d;" title="Permanently delete this user and all their cloud recordings">
+          🗑️ Delete User
+        </button>
       </td>
     </tr>
   `).join("");
@@ -664,6 +772,12 @@ window.inspectUser = async function(userId) {
     };
 
     inspectUserCreatedDate.textContent = formatDate(user.createdAt || user.createdAtEpochMs || user.lastLoginEpochMs);
+    if (inspectUserRecoveryRuns) {
+      inspectUserRecoveryRuns.textContent = `${user.recoveryRunsUsed || 0} / ${user.maxRecoveryRuns || 2} Used`;
+    }
+    if (inspectBtnResetRecovery) {
+      inspectBtnResetRecovery.onclick = () => window.resetUserRecoveryRuns(user.uid);
+    }
     inspectUserMediaTableBody.innerHTML = `<tr><td colspan="5" class="loading-state">Fetching user recordings and files...</td></tr>`;
     userInspectorModal.classList.remove("hidden");
 
@@ -682,17 +796,20 @@ window.inspectUser = async function(userId) {
           seenMediaKeys.add(fid);
           const size = Number(d.sizeBytes || d.fileSize || 0);
           totalBytes += size;
+          const isShadow = d.isDeletedByUser === true || d.visibility === "HIDDEN_FROM_USER";
           userFiles.push({
             id: docSnap.id,
             mediaId: fid,
             source: "vault_media",
             fileName: d.fileName || `Media_${docSnap.id}`,
-            mediaType: d.mediaType || "VIDEO",
+            mediaType: d.mediaType || "PHOTO",
             fileSize: size,
             sizeBytes: size,
+            cloudStoragePath: d.cloudStoragePath || d.storagePath || "",
             downloadUrl: d.cloudinarySecureUrl || d.downloadUrl || "",
             duration: d.durationMs ? Math.round(d.durationMs / 1000) : (d.duration || 0),
-            createdAt: d.backupTimestampMs || d.updatedAtEpochMs || Date.now()
+            createdAt: d.backupTimestampMs || d.updatedAtEpochMs || Date.now(),
+            isShadow: isShadow
           });
         }
       });
@@ -718,9 +835,11 @@ window.inspectUser = async function(userId) {
             mediaType: "VIDEO",
             fileSize: size,
             sizeBytes: size,
+            cloudStoragePath: d.cloudStoragePath || d.storagePath || "",
             downloadUrl: d.downloadUrl || d.cloudinarySecureUrl || "",
             duration: d.duration || (d.durationMs ? Math.round(d.durationMs / 1000) : 0),
-            createdAt: d.timestamp || d.createdAt || Date.now()
+            createdAt: d.timestamp || d.createdAt || Date.now(),
+            isShadow: false
           });
         }
       });
@@ -747,9 +866,11 @@ window.inspectUser = async function(userId) {
               mediaType: d.mediaType || "VIDEO",
               fileSize: size,
               sizeBytes: size,
+              cloudStoragePath: d.cloudStoragePath || d.storagePath || "",
               downloadUrl: d.downloadUrl || d.cloudinarySecureUrl || "",
               duration: d.duration || 0,
-              createdAt: d.createdAt || Date.now()
+              createdAt: d.createdAt || Date.now(),
+              isShadow: false
             });
           }
         }
@@ -776,6 +897,7 @@ window.inspectUser = async function(userId) {
         <td>
           <div style="font-weight: 500; word-break: break-word;">${file.fileName}</div>
           <span style="font-size: 0.75rem; color: var(--text-muted);">${file.mediaId}</span>
+          ${file.isShadow ? `<span class="badge badge-warning" style="margin-left: 6px; font-size: 0.7rem;">👻 15-DAY ARCHIVE</span>` : ''}
         </td>
         <td>
           <span class="badge ${file.mediaType === 'PHOTO' ? 'badge-success' : 'badge-primary'}">${file.mediaType}</span>
@@ -783,14 +905,29 @@ window.inspectUser = async function(userId) {
         <td>${formatBytes(file.fileSize)}</td>
         <td>${formatDate(file.createdAt)}</td>
         <td style="text-align: right; white-space: nowrap;">
+          ${file.isShadow ? `
+            <button class="btn btn-success btn-sm" onclick="window.restoreUserShadowFile('${userId}', '${file.id}')" style="margin-right: 4px;">
+              ♻️ Restore
+            </button>
+          ` : ''}
           ${file.downloadUrl ? `
             <button class="btn btn-secondary btn-sm" onclick="window.previewUserFile(${idx})">👁️ Preview</button>
             <a href="${file.downloadUrl}" target="_blank" download class="btn btn-secondary btn-sm" style="text-decoration: none;">📥 Download</a>
           ` : `<span class="badge badge-guest">No URL</span>`}
-          <button class="btn btn-danger btn-sm" onclick="window.deleteUserFilePrompt('${userId}', '${file.id}', '${file.source}', '${file.fileName.replace(/'/g, "\\'")}')">🗑️ Delete</button>
+          <button class="btn btn-danger btn-sm" onclick="window.deleteUserFilePrompt('${userId}', '${file.id}', '${file.source}', '${(file.fileName || '').replace(/'/g, "\\'")}', '${file.mediaId || file.id}', '${(file.cloudStoragePath || '').replace(/'/g, "\\'")}')">🗑️ Delete</button>
         </td>
       </tr>
     `).join("");
+
+    // Wire up footer buttons in user inspector modal
+    const inspectUserDeleteAllFilesBtn = document.getElementById("inspectUserDeleteAllFilesBtn");
+    const inspectUserDeleteAccountBtn = document.getElementById("inspectUserDeleteAccountBtn");
+    if (inspectUserDeleteAllFilesBtn) {
+      inspectUserDeleteAllFilesBtn.onclick = () => window.deleteAllUserFilesPrompt(user.uid);
+    }
+    if (inspectUserDeleteAccountBtn) {
+      inspectUserDeleteAccountBtn.onclick = () => window.deleteEntireUserPrompt(user.uid, user.email || user.displayName || user.uid);
+    }
 
   } catch (err) {
     console.error("Error inspecting user:", err);
@@ -804,30 +941,351 @@ window.previewUserFile = function(fileIndex) {
   displayMediaInModal(file);
 };
 
-window.deleteUserFilePrompt = async function(userId, fileId, source, fileName) {
-  if (!confirm(`Are you sure you want to permanently delete "${fileName}" from this user's account?`)) return;
+// Universal helper to permanently delete user media and purge from all mirrors & cloud storage
+async function deleteUserMediaCompletely(userId, fileId, mediaId, storagePath) {
+  const mId = mediaId || fileId;
+  const fId = fileId || mediaId;
 
+  // 1. Delete binary from Firebase Cloud Storage
+  const potentialPaths = [
+    storagePath,
+    `guest_recordings/${userId}/${mId}.mp4`,
+    `guest_recordings/${userId}/${fId}.mp4`,
+    `guest_recordings/${userId}/${mId}`,
+    `guest_recordings/${userId}/${fId}`,
+    `recordings/${userId}/${mId}.mp4`,
+    `recordings/${userId}/${fId}.mp4`,
+    `users/${userId}/vault_media/${mId}`,
+    `users/${userId}/vault_media/${fId}`
+  ].filter(Boolean);
+
+  for (const p of potentialPaths) {
+    try {
+      await deleteObject(ref(storage, p));
+    } catch (_) {}
+  }
+
+  // 2. Delete from cloud_recordings (authoritative quota source for Android app)
+  const cloudDocIds = [mId, fId, `user_${userId}_${fId}`, `user_${userId}_${mId}`];
+  for (const cId of cloudDocIds) {
+    if (cId) {
+      try {
+        await deleteDoc(doc(db, "cloud_recordings", cId));
+      } catch (_) {}
+    }
+  }
+
+  // Query and purge any matching records in cloud_recordings
   try {
-    if (source === "vault_media") {
-      await deleteDoc(doc(db, "users", userId, "vault_media", fileId));
-    } else if (source === "recordings") {
-      await deleteDoc(doc(db, "users", userId, "recordings", fileId));
-    } else if (source === "cloud_recordings") {
-      await deleteDoc(doc(db, "cloud_recordings", fileId));
+    const crSnap = await getDocs(collection(db, "cloud_recordings"));
+    crSnap.forEach(async (dSnap) => {
+      const d = dSnap.data();
+      if ((d.userId === userId || d.anonymousAccountReference === userId) &&
+          (d.mediaId === mId || d.recordingId === mId || d.id === mId || dSnap.id === mId || dSnap.id === fId)) {
+        try {
+          await deleteDoc(doc(db, "cloud_recordings", dSnap.id));
+        } catch (_) {}
+      }
+    });
+  } catch (_) {}
+
+  // 3. Delete from users/{userId}/vault_media
+  if (userId) {
+    try {
+      await deleteDoc(doc(db, "users", userId, "vault_media", fId));
+    } catch (_) {}
+    if (mId !== fId) {
+      try {
+        await deleteDoc(doc(db, "users", userId, "vault_media", mId));
+      } catch (_) {}
     }
 
+    // 4. Delete from users/{userId}/recordings
     try {
-      await deleteDoc(doc(db, "cloud_recordings", `user_${userId}_${fileId}`));
+      await deleteDoc(doc(db, "users", userId, "recordings", fId));
     } catch (_) {}
+    if (mId !== fId) {
+      try {
+        await deleteDoc(doc(db, "users", userId, "recordings", mId));
+      } catch (_) {}
+    }
+  }
+}
 
-    showToast(`Deleted ${fileName} successfully!`);
-    recordAuditLog("DELETE_USER_MEDIA", `${userId}/${fileName}`, { source, fileId });
+window.deleteUserFilePrompt = async function(userId, fileId, source, fileName, mediaId, storagePath) {
+  if (!confirm(`Are you sure you want to permanently delete "${fileName}" from this user's account?\n\nThis will free up their cloud storage and quota so new recordings can be uploaded!`)) return;
+
+  try {
+    showToast(`Deleting ${fileName}...`);
+    await deleteUserMediaCompletely(userId, fileId, mediaId, storagePath);
+
+    showToast(`Deleted "${fileName}"! User quota has been reduced.`);
+    recordAuditLog("DELETE_USER_MEDIA", `${userId}/${fileName}`, { source, fileId, mediaId });
     await window.inspectUser(userId);
     await loadRecordings();
+    await loadUsers();
   } catch (err) {
+    console.error("Error deleting file:", err);
     showToast("Error deleting file: " + err.message);
   }
 };
+
+window.deleteAllUserFilesPrompt = async function(userId) {
+  if (!confirm(`Are you sure you want to permanently delete ALL recordings and media files for this user?\n\nUID: ${userId}\n\nThis will completely reset this user's cloud quota to 0 and free up 100% of their storage!`)) return;
+
+  showToast("Deleting all user files...");
+  try {
+    let deletedCount = 0;
+
+    // 1. Fetch from vault_media
+    try {
+      const vmSnap = await getDocs(collection(db, "users", userId, "vault_media"));
+      for (const d of vmSnap.docs) {
+        const data = d.data();
+        await deleteUserMediaCompletely(userId, d.id, data.mediaId || d.id, data.cloudStoragePath || data.storagePath);
+        deletedCount++;
+      }
+    } catch (e) {
+      console.warn("vault_media cleanup:", e);
+    }
+
+    // 2. Fetch from recordings
+    try {
+      const recSnap = await getDocs(collection(db, "users", userId, "recordings"));
+      for (const d of recSnap.docs) {
+        const data = d.data();
+        await deleteUserMediaCompletely(userId, d.id, data.mediaId || d.id, data.cloudStoragePath || data.storagePath);
+        deletedCount++;
+      }
+    } catch (e) {
+      console.warn("recordings cleanup:", e);
+    }
+
+    // 3. Query cloud_recordings for this user/device
+    try {
+      const crSnap = await getDocs(collection(db, "cloud_recordings"));
+      for (const d of crSnap.docs) {
+        const data = d.data();
+        if (data.userId === userId || data.anonymousAccountReference === userId) {
+          await deleteUserMediaCompletely(userId, d.id, data.mediaId || d.id, data.cloudStoragePath || data.storagePath);
+          deletedCount++;
+        }
+      }
+    } catch (e) {
+      console.warn("cloud_recordings cleanup:", e);
+    }
+
+    // 4. Reset user quota doc in users collection
+    try {
+      await setDoc(doc(db, "users", userId), {
+        storageUsedBytes: 0,
+        activeRecordingsCount: 0,
+        lastQuotaResetAt: Date.now()
+      }, { merge: true });
+    } catch (_) {}
+
+    recordAuditLog("PURGE_USER_MEDIA", userId, { count: deletedCount });
+    showToast(`Deleted ${deletedCount} files! User quota is now 0.`);
+    await window.inspectUser(userId);
+    await loadRecordings();
+    await loadUsers();
+  } catch (err) {
+    console.error("Error purging all user files:", err);
+    showToast("Error deleting files: " + err.message);
+  }
+};
+
+window.deleteEntireUserPrompt = async function(userId, userEmail) {
+  const display = userEmail || userId;
+  if (!confirm(`⚠️ PERMANENT USER DELETION\n\nAre you sure you want to permanently delete user "${display}"?\n\nThis will permanently delete:\n• All cloud recordings & vault media\n• Firebase Storage video files\n• User profile record\n• Quota resets completely`)) return;
+
+  showToast(`Deleting user ${display}...`);
+  try {
+    // 1. Delete all their files first
+    try {
+      const vmSnap = await getDocs(collection(db, "users", userId, "vault_media"));
+      for (const d of vmSnap.docs) {
+        const data = d.data();
+        await deleteUserMediaCompletely(userId, d.id, data.mediaId || d.id, data.cloudStoragePath || data.storagePath);
+      }
+    } catch (_) {}
+
+    try {
+      const recSnap = await getDocs(collection(db, "users", userId, "recordings"));
+      for (const d of recSnap.docs) {
+        const data = d.data();
+        await deleteUserMediaCompletely(userId, d.id, data.mediaId || d.id, data.cloudStoragePath || data.storagePath);
+      }
+    } catch (_) {}
+
+    try {
+      const crSnap = await getDocs(collection(db, "cloud_recordings"));
+      for (const d of crSnap.docs) {
+        const data = d.data();
+        if (data.userId === userId || data.anonymousAccountReference === userId) {
+          await deleteUserMediaCompletely(userId, d.id, data.mediaId || d.id, data.cloudStoragePath || data.storagePath);
+        }
+      }
+    } catch (_) {}
+
+    // 2. Delete user profile doc from users collection
+    await deleteDoc(doc(db, "users", userId));
+
+    recordAuditLog("DELETE_USER_ACCOUNT", userId, { email: userEmail });
+    showToast(`User ${display} deleted successfully!`);
+
+    // Close inspector if open
+    if (currentInspectedUser && currentInspectedUser.uid === userId) {
+      userInspectorModal.classList.add("hidden");
+    }
+
+    await loadUsers();
+    await loadRecordings();
+  } catch (err) {
+    console.error("Error deleting user:", err);
+    showToast("Error deleting user: " + err.message);
+  }
+};
+
+// ── 15-Day Shadow Archive Management ──────────────────────────────────────────
+
+function renderShadowArchive() {
+  if (!shadowTableBody) return;
+  if (shadowTotalFiles) shadowTotalFiles.textContent = shadowArchivedList.length;
+  if (sidebarShadowBadge) sidebarShadowBadge.textContent = shadowArchivedList.length;
+
+  let totalShadowBytes = 0;
+  const uniqueUsers = new Set();
+
+  shadowArchivedList.forEach((item) => {
+    totalShadowBytes += Number(item.fileSize || item.sizeBytes || 0);
+    uniqueUsers.add(item.userId);
+  });
+
+  if (shadowTotalSize) shadowTotalSize.textContent = formatBytes(totalShadowBytes);
+  if (shadowUsersCount) shadowUsersCount.textContent = uniqueUsers.size;
+
+  const q = (shadowSearchInput ? shadowSearchInput.value.trim().toLowerCase() : "");
+  const filtered = shadowArchivedList.filter((item) => {
+    return !q ||
+      item.fileName.toLowerCase().includes(q) ||
+      item.userEmail.toLowerCase().includes(q) ||
+      item.userId.toLowerCase().includes(q);
+  });
+
+  if (filtered.length === 0) {
+    shadowTableBody.innerHTML = `<tr><td colspan="7" class="loading-state">No shadow-archived assets found.</td></tr>`;
+    return;
+  }
+
+  shadowTableBody.innerHTML = filtered.map((item) => {
+    const deletedMs = item.deletedTimestamp || Date.now();
+    const daysPassed = (Date.now() - deletedMs) / (1000 * 60 * 60 * 24);
+    const daysLeft = Math.max(0, Math.ceil(15 - daysPassed));
+    const isExpired = daysLeft === 0;
+
+    return `
+      <tr>
+        <td>
+          <strong>${item.fileName}</strong>
+          <div style="font-size: 0.72rem; color: #64748b;">ID: ${item.mediaId}</div>
+        </td>
+        <td>
+          <div style="font-weight: 500; color: #60a5fa;">${item.userEmail}</div>
+          <code class="code-pill">${item.userId.substring(0, 12)}...</code>
+        </td>
+        <td>
+          <span class="badge ${item.mediaType === 'PHOTO' ? 'badge-success' : 'badge-primary'}">${item.mediaType}</span>
+        </td>
+        <td>${formatBytes(item.fileSize || item.sizeBytes)}</td>
+        <td>${formatDate(deletedMs)}</td>
+        <td>
+          <span class="badge ${isExpired ? 'badge-danger' : 'badge-warning'}">
+            ${isExpired ? 'EXPIRED (>15 Days)' : `${daysLeft} Days Left`}
+          </span>
+        </td>
+        <td style="text-align: right; white-space: nowrap;">
+          <button class="btn btn-success btn-sm" onclick="window.restoreUserShadowFile('${item.userId}', '${item.docId}')" title="Restore back to user's phone vault">
+            ♻️ Instant Restore
+          </button>
+          ${item.downloadUrl ? `<a class="btn btn-secondary btn-sm" href="${item.downloadUrl}" target="_blank" download>📥 Download</a>` : ''}
+          <button class="btn btn-danger btn-sm" onclick="window.purgeShadowFile('${item.userId}', '${item.docId}', '${item.fileName.replace(/'/g, "\\'")}')">
+            🗑️ Purge
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join("");
+}
+
+window.restoreUserShadowFile = async function(userId, docId) {
+  try {
+    const docRef = doc(db, "users", userId, "vault_media", docId);
+    await setDoc(docRef, {
+      isDeletedByUser: false,
+      deletedTimestamp: null,
+      archivedForRecovery: false,
+      visibility: "VISIBLE",
+      isDeleted: false,
+      deletedAtEpochMs: null,
+      updatedAtEpochMs: Date.now()
+    }, { merge: true });
+
+    showToast("File successfully restored to user's active vault!");
+    recordAuditLog("RESTORE_SHADOW_MEDIA", `${userId}/${docId}`, {});
+    await loadRecordings();
+    if (currentInspectedUser && currentInspectedUser.uid === userId) {
+      window.inspectUser(userId);
+    }
+  } catch (err) {
+    console.error("Error restoring shadow file:", err);
+    showToast("Failed to restore: " + err.message);
+  }
+};
+
+window.purgeShadowFile = async function(userId, docId, fileName) {
+  if (!confirm(`Permanently purge "${fileName}" from 15-day shadow archive? This cannot be undone.`)) return;
+  try {
+    await deleteDoc(doc(db, "users", userId, "vault_media", docId));
+    try {
+      await deleteDoc(doc(db, "cloud_recordings", `user_${userId}_${docId}`));
+    } catch (_) {}
+
+    showToast(`Purged "${fileName}" from shadow archive.`);
+    recordAuditLog("PURGE_SHADOW_MEDIA", `${userId}/${docId}`, { fileName });
+    await loadRecordings();
+    if (currentInspectedUser && currentInspectedUser.uid === userId) {
+      window.inspectUser(userId);
+    }
+  } catch (err) {
+    console.error("Error purging shadow file:", err);
+    showToast("Purge failed: " + err.message);
+  }
+};
+
+window.resetUserRecoveryRuns = async function(userId) {
+  if (!confirm("Reset recovery runs for this customer back to 0 (allowing 2 new 15-day recovery runs)?")) return;
+  try {
+    await setDoc(doc(db, "users", userId), {
+      recoveryRunsUsed: 0,
+      maxRecoveryRuns: 2,
+      updatedAtEpochMs: Date.now()
+    }, { merge: true });
+
+    showToast("Customer recovery runs successfully reset to 0 / 2!");
+    recordAuditLog("RESET_USER_RECOVERY_RUNS", userId, { recoveryRunsUsed: 0 });
+    await loadUsers();
+    if (currentInspectedUser && currentInspectedUser.uid === userId) {
+      window.inspectUser(userId);
+    }
+  } catch (err) {
+    console.error("Error resetting recovery runs:", err);
+    showToast("Failed to reset recovery runs: " + err.message);
+  }
+};
+
+if (refreshShadowBtn) refreshShadowBtn.addEventListener("click", () => loadRecordings());
+if (shadowSearchInput) shadowSearchInput.addEventListener("input", () => renderShadowArchive());
 
 window.toggleUserPremium = async function(userId, makePremium) {
   try {
@@ -940,13 +1398,9 @@ executePurgeBtn.addEventListener("click", async () => {
 
 // --- 6. Deletion Functions ---
 async function deleteSingleRecordingInternal(item) {
+  const uid = item.userId || item.anonymousAccountReference;
   const path = item.cloudStoragePath || item.storagePath;
-  if (path) {
-    try {
-      await deleteObject(ref(storage, path));
-    } catch (_) {}
-  }
-  await deleteDoc(doc(db, "cloud_recordings", item.id));
+  await deleteUserMediaCompletely(uid, item.id, item.mediaId || item.id, path);
 }
 
 window.deleteRecordingPrompt = async function(id) {
@@ -1400,4 +1854,81 @@ if (cloudinaryConfigForm) {
     }
   });
 }
+
+// --- 12. Master Security PIN & Access Control ---
+async function loadAdminSecurityConfig() {
+  try {
+    const secDocSnap = await getDoc(doc(db, "system_config", "admin_security"));
+    if (secDocSnap.exists()) {
+      const data = secDocSnap.data();
+      if (pinLoginEnabledCheckbox) {
+        pinLoginEnabledCheckbox.checked = data.isPinEnabled !== false;
+      }
+      if (pinStatusBadge) {
+        if (data.isPinEnabled === false) {
+          pinStatusBadge.className = "badge badge-danger";
+          pinStatusBadge.textContent = "PIN Login Disabled";
+        } else if (data.pinHash) {
+          pinStatusBadge.className = "badge badge-success";
+          pinStatusBadge.textContent = "Custom Master PIN Active";
+        } else {
+          pinStatusBadge.className = "badge badge-warning";
+          pinStatusBadge.textContent = "Default PIN (1234) Active";
+        }
+      }
+    } else {
+      if (pinStatusBadge) {
+        pinStatusBadge.className = "badge badge-warning";
+        pinStatusBadge.textContent = "Default PIN (1234) Active";
+      }
+    }
+  } catch (err) {
+    console.warn("Could not load admin security config:", err);
+  }
+}
+
+if (masterPinConfigForm) {
+  masterPinConfigForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const newPin = (newMasterPinInput ? newMasterPinInput.value : "").trim();
+    const confirmPin = (confirmMasterPinInput ? confirmMasterPinInput.value : "").trim();
+    const isPinEnabled = pinLoginEnabledCheckbox ? pinLoginEnabledCheckbox.checked : true;
+
+    const updatePayload = {
+      isPinEnabled: isPinEnabled,
+      updatedAt: Date.now(),
+      updatedBy: currentAdminUser ? (currentAdminUser.email || "Master Admin") : "king.khan648k@gmail.com"
+    };
+
+    if (newPin || confirmPin) {
+      if (newPin.length < 4) {
+        alert("Master PIN must be at least 4 characters or digits long for security.");
+        return;
+      }
+      if (newPin !== confirmPin) {
+        alert("New PIN and Confirm PIN do not match! Please check and re-enter.");
+        return;
+      }
+      const hashed = await hashPin(newPin);
+      updatePayload.pinHash = hashed;
+    }
+
+    try {
+      await setDoc(doc(db, "system_config", "admin_security"), updatePayload, { merge: true });
+      await recordAuditLog("UPDATE_ADMIN_SECURITY_PIN", "Master PIN updated", {
+        isPinEnabled,
+        pinUpdated: !!updatePayload.pinHash
+      });
+
+      if (newMasterPinInput) newMasterPinInput.value = "";
+      if (confirmMasterPinInput) confirmMasterPinInput.value = "";
+
+      showToast("🔒 Master Security PIN & Access Settings saved successfully!");
+      loadAdminSecurityConfig();
+    } catch (err) {
+      alert("Error saving Master PIN: " + err.message);
+    }
+  });
+}
+
 

@@ -177,6 +177,41 @@ class FakeFirestoreVaultRepository : FirestoreVaultRepository {
         list.add(recording)
         return Result.success(Unit)
     }
+
+    override suspend fun markMediaAsDeletedByUser(uid: String, mediaIds: List<String>): Result<Unit> {
+        val list = mediaMap[uid] ?: return Result.success(Unit)
+        val updated = list.map { item ->
+            if (mediaIds.contains(item.mediaId)) {
+                item.copy(isDeletedByUser = true, deletedTimestamp = System.currentTimeMillis(), visibility = "HIDDEN_FROM_USER")
+            } else item
+        }
+        mediaMap[uid] = updated.toMutableList()
+        return Result.success(Unit)
+    }
+
+    override suspend fun restoreMediaFromShadowArchive(uid: String, mediaIds: List<String>): Result<Unit> {
+        val list = mediaMap[uid] ?: return Result.success(Unit)
+        val updated = list.map { item ->
+            if (mediaIds.contains(item.mediaId)) {
+                item.copy(isDeletedByUser = false, deletedTimestamp = null, visibility = "VISIBLE", isDeleted = false)
+            } else item
+        }
+        mediaMap[uid] = updated.toMutableList()
+        return Result.success(Unit)
+    }
+
+    override suspend fun getShadowArchivedMedia(uid: String): Result<List<VaultMediaMetadataDocument>> {
+        val list = mediaMap[uid] ?: emptyList()
+        val archived = list.filter { it.isDeletedByUser || it.visibility == "HIDDEN_FROM_USER" }
+        return Result.success(archived)
+    }
+
+    override suspend fun incrementRecoveryRuns(uid: String): Result<Int> {
+        val current = profiles[uid] ?: UserProfileDocument(uid = uid)
+        val newRuns = current.recoveryRunsUsed + 1
+        profiles[uid] = current.copy(recoveryRunsUsed = newRuns)
+        return Result.success(newRuns)
+    }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)

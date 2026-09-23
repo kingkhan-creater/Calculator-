@@ -56,6 +56,13 @@ fun AppNavigation(
     var activeUpdateResult by remember { mutableStateOf<AppUpdateState.UpdateAvailable?>(null) }
     var activeAnnouncement by remember { mutableStateOf<AdminAnnouncement?>(null) }
 
+    // On User Login / Change: Refresh authoritative subscription & VIP status from Firestore
+    LaunchedEffect(currentUserId) {
+        if (!currentUserId.isNullOrBlank()) {
+            appContainer.entitlementManager.refreshSubscriptionFromServer(currentUserId)
+        }
+    }
+
     // On App Startup: Check for App Updates and Unread Broadcast Announcements
     LaunchedEffect(currentUserId, isPremiumUser) {
         // 1. Check for App Updates

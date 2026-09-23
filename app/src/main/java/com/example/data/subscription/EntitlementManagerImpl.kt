@@ -141,24 +141,58 @@ class EntitlementManagerImpl(
         }
     }
 
+    private var firestoreRegistration: com.google.firebase.firestore.ListenerRegistration? = null
+
     override suspend fun refreshSubscriptionFromServer(userId: String): Result<SubscriptionState> {
+        if (userId.isNotBlank()) {
+            observeUserFirestoreSubscription(userId)
+        }
         val result = serverValidator.fetchAuthoritativeSubscription(userId)
         result.onSuccess { verifiedState ->
-            if (verifiedState.isServerVerified) {
+            if (verifiedState.isServerVerified && verifiedState.isPremiumActive) {
                 applyState(verifiedState)
-            } else {
-                applyState(
-                    verifiedState.copy(
-                        plan = SubscriptionPlan.FREE,
-                        status = SubscriptionStatus.FREE,
-                        isServerVerified = false
-                    )
-                )
+            } else if (verifiedState.isServerVerified && !verifiedState.isPremiumActive) {
+                if (!_currentSubscriptionState.value.isBillingVerified && adminOverride != true) {
+                    applyState(verifiedState)
+                }
             }
         }.onFailure {
             // Keep current verified state if present
         }
         return result
+    }
+
+    private fun observeUserFirestoreSubscription(userId: String) {
+        firestoreRegistration?.remove()
+        try {
+            val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+            firestoreRegistration = firestore.collection("users").document(userId)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null || snapshot == null || !snapshot.exists()) return@addSnapshotListener
+                    val isPremium = (snapshot.getBoolean("isPremium") == true) ||
+                                    (snapshot.getBoolean("premiumGrantedByAdmin") == true) ||
+                                    (snapshot.getString("role") == "ADMIN")
+                    val expiryTimestamp = snapshot.getLong("subscriptionExpiryTimestamp")?.takeIf { it > 0L }
+                    val now = System.currentTimeMillis()
+                    val isNotExpired = expiryTimestamp == null || expiryTimestamp > now
+
+                    if (isPremium && isNotExpired) {
+                        val verifiedState = SubscriptionState(
+                            userId = userId,
+                            plan = SubscriptionPlan.PREMIUM,
+                            status = SubscriptionStatus.PREMIUM_ACTIVE,
+                            isActive = true,
+                            expiryTimestamp = expiryTimestamp,
+                            productId = snapshot.getString("licenseKey") ?: "ADMIN_VIP_ACCESS",
+                            isAutoRenewing = false,
+                            serverVerifiedAt = now,
+                            isServerVerified = true,
+                            isBillingVerified = false
+                        )
+                        applyState(verifiedState)
+                    }
+                }
+        } catch (_: Exception) {}
     }
 
     override fun updateBillingPurchases(purchases: List<BillingPurchaseInfo>) {
@@ -196,7 +230,9 @@ class EntitlementManagerImpl(
             }
             else -> {
                 // No active or pending Google Play subscription
-                if (!currentState.isServerVerified) {
+                // IMPORTANT: Do NOT reset to FREE if user has Admin-granted VIP or server-verified active subscription!
+                val isCurrentlyPremium = currentState.isServerVerified || currentState.isPremiumActive || adminOverride == true
+                if (!isCurrentlyPremium) {
                     val status = if (currentState.status == SubscriptionStatus.SUBSCRIPTION_ACTIVE ||
                         currentState.status == SubscriptionStatus.PREMIUM_ACTIVE
                     ) {

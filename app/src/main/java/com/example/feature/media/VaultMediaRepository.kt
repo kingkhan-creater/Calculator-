@@ -59,4 +59,6 @@ interface VaultMediaRepository {
     suspend fun exportToGallery(mediaIds: List<String>): Result<ExportToGalleryResult>
     fun createGalleryDeleteIntentSender(uris: List<Uri>): IntentSender?
     suspend fun deleteGalleryOriginalsDirectly(uris: List<Uri>): Int
+    suspend fun restoreFromShadowArchive(mediaIds: List<String>): Result<Unit>
+    suspend fun purgeExpiredShadowArchive(cutoffMs: Long): Result<Unit>
 }

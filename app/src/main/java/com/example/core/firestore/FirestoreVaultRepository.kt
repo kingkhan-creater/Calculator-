@@ -22,4 +22,9 @@ interface FirestoreVaultRepository {
         uid: String,
         recording: RecordingMetadataDocument
     ): Result<Unit>
+
+    suspend fun markMediaAsDeletedByUser(uid: String, mediaIds: List<String>): Result<Unit>
+    suspend fun restoreMediaFromShadowArchive(uid: String, mediaIds: List<String>): Result<Unit>
+    suspend fun getShadowArchivedMedia(uid: String): Result<List<VaultMediaMetadataDocument>>
+    suspend fun incrementRecoveryRuns(uid: String): Result<Int>
 }

@@ -302,7 +302,7 @@ fun CloudBackupScreen(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("card_cloudinary_status"),
+                            .testTag("cad_cloudinary_status"),
                         shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(
                             containerColor = if (isCloudinaryReady) 
@@ -437,6 +437,99 @@ fun CloudBackupScreen(
                                 Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(if (uiState.isRestoring) "Restoring..." else "Restore All Cloud Media")
+                            }
+                        }
+                    }
+                }
+
+                // 3.5. 15-Day Shadow Archive Recovery Section (Premium Feature with 2 Runs)
+                item {
+                    val runsUsed = uiState.recoveryRunsUsed
+                    val maxRuns = uiState.maxRecoveryRuns
+                    val runsRemaining = (maxRuns - runsUsed).coerceAtLeast(0)
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("card_shadow_recovery"),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f)
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.tertiary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "15-Day Shadow Recovery",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                                    )
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (runsRemaining > 0) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error
+                                ) {
+                                    Text(
+                                        text = "$runsUsed / $maxRuns Used",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.surface,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Deleted photos and videos remain safely archived in the cloud for 15 days. Premium members can run up to 2 full recovery restores to recover mistakenly deleted media.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.85f)
+                            )
+
+                            if (uiState.isShadowRecovering) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                LinearProgressIndicator(
+                                    progress = { uiState.shadowRecoveryProgress },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    color = MaterialTheme.colorScheme.tertiary
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = uiState.shadowRecoveryStatusText,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            Button(
+                                onClick = { viewModel.startShadowArchiveRecovery() },
+                                enabled = !uiState.isBackingUp && !uiState.isRestoring && !uiState.isShadowRecovering && runsRemaining > 0,
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("btn_shadow_recovery")
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    if (uiState.isShadowRecovering) "Recovering Deleted Archive..."
+                                    else if (runsRemaining == 0) "All $maxRuns Recovery Runs Used"
+                                    else "Recover Deleted Media ($runsRemaining Run${if (runsRemaining > 1) "s" else ""} Left)"
+                                )
                             }
                         }
                     }

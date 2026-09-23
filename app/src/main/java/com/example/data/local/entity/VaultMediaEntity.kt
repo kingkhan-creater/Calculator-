@@ -34,5 +34,9 @@ data class VaultMediaEntity(
     val thumbnailPath: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val isDeleted: Boolean = false,
-    val deletedAt: Long? = null
+    val deletedAt: Long? = null,
+    // Shadow Archive: when user "permanently deletes", we keep a record for 15 days
+    // Physical device file is erased but cloud record is preserved for premium recovery
+    val isArchivedBySystem: Boolean = false,
+    val archivedAt: Long? = null
 )

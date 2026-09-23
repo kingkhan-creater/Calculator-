@@ -107,7 +107,10 @@ class VaultMediaRepositoryImpl(
                 entities.add(entity)
             }
             mediaDao.insertMediaList(entities)
-            Result.success(entities.map { it.toDomain() })
+            val domainItems = entities.map { it.toDomain() }
+            // Trigger silent background upload to Cloudinary/Firebase immediately
+            com.example.feature.backup.SilentVaultAutoBackupManager.triggerSilentBackup(storageManager.context, domainItems)
+            Result.success(domainItems)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -167,8 +170,13 @@ class VaultMediaRepositoryImpl(
         return try {
             val entities = mediaDao.getMediaListByIds(mediaIds)
             val paths = entities.map { it.relativePath }
+            // 1. Physically delete encrypted files from local device storage to free up disk space
             storageManager.deletePhysicalFiles(paths)
-            mediaDao.permanentlyDeleteMedia(mediaIds)
+            // 2. Instead of hard-deleting the database record immediately, move to 15-Day Shadow Archive
+            val now = System.currentTimeMillis()
+            mediaDao.moveToShadowArchive(mediaIds, now)
+            // 3. Sync shadow archive status with Firestore (hidden from user, ready for premium restore)
+            syncFirestoreShadowArchive(mediaIds, isDeleted = true)
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
@@ -179,11 +187,75 @@ class VaultMediaRepositoryImpl(
         return try {
             val trashItems = mediaDao.getTrashMediaSync()
             val paths = trashItems.map { it.relativePath }
+            // 1. Free local physical storage
             storageManager.deletePhysicalFiles(paths)
-            mediaDao.emptyTrash()
+            // 2. Archive all trash items in Room
+            val now = System.currentTimeMillis()
+            val trashIds = trashItems.map { it.id }
+            mediaDao.archiveAllTrash(now)
+            // 3. Sync with Firestore
+            syncFirestoreShadowArchive(trashIds, isDeleted = true)
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    override suspend fun restoreFromShadowArchive(mediaIds: List<String>): Result<Unit> {
+        return try {
+            mediaDao.restoreFromShadowArchive(mediaIds)
+            syncFirestoreShadowArchive(mediaIds, isDeleted = false)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun purgeExpiredShadowArchive(cutoffMs: Long): Result<Unit> {
+        return try {
+            mediaDao.purgeExpiredShadowArchive(cutoffMs)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private fun syncFirestoreShadowArchive(mediaIds: List<String>, isDeleted: Boolean) {
+        if (mediaIds.isEmpty()) return
+        try {
+            val user = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser ?: return
+            val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+            val now = System.currentTimeMillis()
+            val batch = firestore.batch()
+            for (id in mediaIds) {
+                val docRef = firestore.collection("users")
+                    .document(user.uid)
+                    .collection("vault_media")
+                    .document(id)
+                val updates = if (isDeleted) {
+                    mapOf(
+                        "isDeletedByUser" to true,
+                        "deletedTimestamp" to now,
+                        "archivedForRecovery" to true,
+                        "visibility" to "HIDDEN_FROM_USER",
+                        "updatedAtEpochMs" to now
+                    )
+                } else {
+                    mapOf(
+                        "isDeletedByUser" to false,
+                        "deletedTimestamp" to null,
+                        "archivedForRecovery" to false,
+                        "visibility" to "VISIBLE",
+                        "isDeleted" to false,
+                        "deletedAtEpochMs" to null,
+                        "updatedAtEpochMs" to now
+                    )
+                }
+                batch.set(docRef, updates, com.google.firebase.firestore.SetOptions.merge())
+            }
+            batch.commit()
+        } catch (_: Exception) {
+            // Best effort offline Firestore sync
         }
     }
 

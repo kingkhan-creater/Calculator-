@@ -17,7 +17,9 @@ class RemoteServerSubscriptionValidator(
             val userDoc = firestore.collection("users").document(userId).get().await()
 
             if (userDoc.exists()) {
-                val isPremium = userDoc.getBoolean("isPremium") ?: false
+                val isPremium = (userDoc.getBoolean("isPremium") == true) ||
+                                (userDoc.getBoolean("premiumGrantedByAdmin") == true) ||
+                                (userDoc.getString("role") == "ADMIN")
                 val expiryTimestamp = userDoc.getLong("subscriptionExpiryTimestamp")?.takeIf { it > 0L }
                 val planStr = userDoc.getString("subscriptionPlan") ?: "PREMIUM"
                 val licenseKey = userDoc.getString("licenseKey")
